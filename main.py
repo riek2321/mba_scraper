@@ -6,6 +6,7 @@ import datetime
 import requests
 import sys
 import re
+import random
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 from scraper import MBAScraper
@@ -262,25 +263,25 @@ async def main():
         return
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MBA Scraper Service Initializing...")
-    print(f"Mode: ULTRA-FAST Watchdog | Pulse: 60s | Full Scan: 180s")
+    print(f"Mode: PATIENT Watchdog | Pulse: 300s | Full Scan: 900s")
     
     pulse_index = 0
     CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
     
     while True:
         try:
-            # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (180 seconds)
+            # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (900 seconds)
             if pulse_index % 3 == 0:
                 print(f"\n[PULSE {pulse_index}]: Triggering FULL SCAN...")
                 await job(targets=None) 
             else:
-                # Other pulses run TARGETED CLASS SCAN (every 60 seconds)
+                # Other pulses run TARGETED CLASS SCAN (every 300 seconds)
                 print(f"\n[PULSE {pulse_index}]: Triggering TARGETED CLASS SCAN...")
                 await job(targets=[CLASS_URL])
             
             pulse_index += 1
-            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 60 seconds...")
-            await asyncio.sleep(60)
+            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 300 seconds...")
+            await asyncio.sleep(300)
             
         except Exception as e:
             print(f"[MAIN][ERROR]: Loop error: {e}")

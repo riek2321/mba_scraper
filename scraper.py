@@ -3,6 +3,7 @@ from playwright.async_api import async_playwright
 import datetime
 import dateutil.parser as dparser
 import re
+import random
 
 class MBAScraper:
     def __init__(self, base_url="https://web.sol.du.ac.in/home"):
@@ -66,9 +67,8 @@ class MBAScraper:
             
             print(f"[CRAWLER]: Starting scan of {len(start_urls)} target areas")
             for url in start_urls:
-                # Add a small random delay between start URLs to seem more human
-                import random
-                await asyncio.sleep(random.uniform(1.5, 3.5))
+                # Patient waiting to seem more human and allow server response
+                await asyncio.sleep(random.uniform(3.0, 6.0))
                 await self.crawl(page, url, depth=0, max_depth=1) 
             
             await browser.close()
@@ -79,8 +79,7 @@ class MBAScraper:
             return
         self.visited.add(url)
         
-        import random
-        await asyncio.sleep(random.uniform(1.0, 2.5)) # Human-like delay
+        await asyncio.sleep(random.uniform(2.0, 4.0)) # Patient delay
 
         print(f"[CRAWLER][Depth {depth}]: Visiting {url}")
         try:
@@ -131,8 +130,9 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        print("[CRAWLER]: Scrolling to load all class entries...")
+        print("[CRAWLER]: Scrolling deeply to load all class entries (Patient Mode)...")
         await self.auto_scroll(page)
+        await asyncio.sleep(5) # Extra wait for lazy content
         
         print("[CRAWLER]: Parsing Online Class Schedule table...")
         try:
@@ -350,12 +350,12 @@ class MBAScraper:
 
     def extract_semester_logic(self, text):
         if not text: return "0"
-        import re
         
-        # 1. Roman Numerals: Semester IV, Sem III, etc.
+        # 1. Roman Numerals: IV, III, II, I (Strict word boundary)
+        # We check IV first so it doesn't match I partially
         roman_map = {"IV": "4", "III": "3", "II": "2", "I": "1"}
         for rom, num in roman_map.items():
-            if re.search(rf'\b(Sem(?:ester)?|Year)?\b\s*{rom}\b', text, re.I):
+            if re.search(rf'\b{rom}\b', text, re.I):
                 return num
 
         # 2. Standard Sem 1, Semester 1
