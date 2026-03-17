@@ -57,18 +57,13 @@ async def job():
             }
             resp = requests.get(CLASS_URL, headers=probe_headers, timeout=15)
             if resp.status_code == 403:
-                print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Skipping Deep Scan.")
-                # We still run a limited scan if it's been a while, but for now we trust the watchdog
-                # found_notices = await scraper.run(days_back=1) # Minimal run
-                return 
+                print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Will skip classes but proceed with rest.")
             elif resp.status_code != 200:
-                print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Skipping.")
-                return
+                print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Proceeding with others.")
             else:
                 print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable! Starting Deep Scan.")
         except Exception as e:
-            print(f"[WATCHDOG][FAIL]: Connection failed: {e}")
-            return
+            print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Proceeding with others.")
 
         # 1. RUN EXHAUSTIVE SCRAPE
         found_notices = await scraper.run(days_back=7)
