@@ -249,10 +249,25 @@ async def job(targets=None):
     except Exception as e:
         print(f"[ERROR]: Job failed: {e}")
 
+def keep_alive():
+    """Self-ping to prevent Render sleep (Free Tier)"""
+    url = os.environ.get("SELF_URL", "https://mba-scraper.onrender.com")
+    while True:
+        try:
+            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [KEEP-ALIVE]: Pinging {url}...")
+            requests.get(url, timeout=10)
+        except Exception as e:
+            print(f"[KEEP-ALIVE][ERROR]: {e}")
+        time.sleep(600) # Ping every 10 minutes
+
 async def main():
     # Start Health Check Server in a separate thread
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
+    
+    # Start Keep-Alive Pinger in a separate thread
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
 
     run_once = "--once" in sys.argv
 

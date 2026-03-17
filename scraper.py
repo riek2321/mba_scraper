@@ -134,6 +134,26 @@ class MBAScraper:
         await self.auto_scroll(page)
         await asyncio.sleep(5) # Extra wait for lazy content
         
+        # Capture Top Timetable Buttons (MBA focus)
+        print("[CRAWLER]: Checking for MBA Timetable buttons at the top...")
+        top_links = await page.evaluate("""() => {
+            const btns = Array.from(document.querySelectorAll('a.btn, .btn, a')).filter(a => 
+                a.innerText.toUpperCase().includes('MBA') && 
+                (a.innerText.toUpperCase().includes('TIMETABLE') || a.innerText.toUpperCase().includes('SCHEDULE'))
+            );
+            return btns.map(a => ({ title: a.innerText.trim(), href: a.href }));
+        }""")
+        for link in top_links:
+            if link['href'] and link['href'] not in [n['link'] for n in self.notices]:
+                print(f"[CRAWLER][HEADER FOUND]: {link['title']}")
+                self.notices.append({
+                    "title": f"[OFFICIAL] {link['title']}",
+                    "link": link['href'],
+                    "semester": self.extract_semester_logic(link['title']),
+                    "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                    "description": "Official MBA Time Table / Schedule from DU SOL"
+                })
+
         print("[CRAWLER]: Parsing Online Class Schedule table...")
         try:
             # Each date has its own section/header and table
@@ -198,9 +218,9 @@ class MBAScraper:
                         link_data = cells[6] if len(cells) > 6 else (cells[-1] if len(cells) > 0 else None)
                         href = link_data['href'] if link_data else None
                         
-                        # Apply keyword filter (Broadened)
-                        is_relevant = any(kw.lower() in (course_text + subject_text).lower() for kw in self.keywords)
-                        if "MBA" in course_text.upper() or is_relevant:
+                        # Apply strict Course filter
+                        is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
+                        if is_mba_course:
                             semester = self.extract_semester_logic(sem_text if sem_text else course_text)
                             if semester == "0": semester = self.extract_semester_logic(course_text)
                             
