@@ -76,41 +76,74 @@ class MBAScraper:
 
         print(f"[CRAWLER][Depth {depth}]: Visiting {url}")
         try:
-            # V3 STEALTH: Attempt primary visit
-            response = await page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            # V4 STEALTH: Human-First Flow for Class Schedule
+            force_human_navigation = "online-class-schedule" in url
             
-            if response and response.status == 403:
-                print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Home...")
-                # Try to navigate from home to establish session
+            if not force_human_navigation:
+                # Normal flow for other pages: Attempt primary visit
+                response = await page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                is_blocked = response and response.status == 403
+            else:
+                is_blocked = True # Force fallback for these URLs
+                print(f"[CRAWLER]: Enforcing Mandatory Human Flow for {url}")
+            
+            if is_blocked:
+                if not force_human_navigation:
+                    print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Home...")
+                
+                # Establish session/cookies from home page
                 await page.goto(self.base_url, wait_until="networkidle", timeout=45000)
                 await asyncio.sleep(random.uniform(3, 5))
                 
                 # Dynamic Link Search
                 found = False
-                # Try by href fragment
-                filename = url.split("/")[-1]
-                link = page.locator(f'a[href*="{filename}"]').first
-                if await link.count() > 0:
-                    print(f"[CRAWLER]: Found link via href: {filename}")
-                    await link.click()
-                    found = True
                 
-                if not found:
-                    # Try by common text for schedule
-                    if "online-class-schedule" in url:
-                        link = page.get_by_role("link", name=re.compile("Online Class Schedule", re.I)).first
+                # Special handling for Online Class Schedule (Students menu)
+                if "online-class-schedule" in url:
+                    try:
+                        print("[CRAWLER]: Interacting with Navigation Menu...")
+                        # 1. Try to directly click the link with force=True (handles hidden/covered elements)
+                        link = page.locator("a[href*='online-class-schedule']").first
                         if await link.count() > 0:
-                            print("[CRAWLER]: Found link via text: Online Class Schedule")
-                            await link.click()
+                            print(f"[CRAWLER]: Found link via href, clicking aggressively...")
+                            await link.click(force=True, timeout=5000)
                             found = True
+                        
+                        if not found:
+                            # 2. Try to hover/click the 'Students' parent first
+                            print("[CRAWLER]: Clicking 'Students' menu to reveal links...")
+                            students_menu = page.locator("text='Students'").first
+                            if await students_menu.count() > 0:
+                                await students_menu.click(force=True)
+                                await asyncio.sleep(1)
+                            
+                            # Search for 'Online Classes' or similar text
+                            link = page.locator("a").filter(has_text=re.compile(r"Online Classes|Online Class Schedule", re.I)).first
+                            if await link.count() > 0:
+                                print(f"[CRAWLER]: Found link via text: {await link.inner_text()}")
+                                await link.click(force=True)
+                                found = True
+                    except Exception as e:
+                        print(f"[CRAWLER][DEBUG]: Menu navigation attempt failed: {e}")
+
+                if not found:
+                    # Generic Fallback: Try by href fragment
+                    filename = url.split("/")[-1]
+                    link = page.locator(f'a[href*="{filename}"]').first
+                    if await link.count() > 0:
+                        print(f"[CRAWLER]: Found link via href: {filename}")
+                        await link.click(force=True)
+                        found = True
                 
                 if found:
-                    await page.wait_for_load_state("networkidle", timeout=30000)
+                    await page.wait_for_load_state("networkidle", timeout=45000)
                 else:
+                    # Extra Debug: Log what we see
                     print(f"[CRAWLER][FAIL]: Could not resolve navigation path for {url}")
+                    print(f"               Page Title: {await page.title()}")
                     return
             else:
-                await page.wait_for_load_state("networkidle", timeout=15000)
+                await page.wait_for_load_state("networkidle", timeout=45000)
             
             # 1. Handle specialized pages (like tables in Online Classes)
             if "online-class-schedule" in url:
