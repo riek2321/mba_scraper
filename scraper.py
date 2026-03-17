@@ -76,14 +76,41 @@ class MBAScraper:
 
         print(f"[CRAWLER][Depth {depth}]: Visiting {url}")
         try:
-            # Set a more realistic timeout and handle 403 gracefully
-            response = await page.goto(url, timeout=45000, wait_until="domcontentloaded")
+            # V3 STEALTH: Attempt primary visit
+            response = await page.goto(url, timeout=30000, wait_until="domcontentloaded")
             
             if response and response.status == 403:
-                print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Site might be blocking or offline.")
-                return
-
-            await page.wait_for_load_state("networkidle", timeout=15000)
+                print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Home...")
+                # Try to navigate from home to establish session
+                await page.goto(self.base_url, wait_until="networkidle", timeout=45000)
+                await asyncio.sleep(random.uniform(3, 5))
+                
+                # Dynamic Link Search
+                found = False
+                # Try by href fragment
+                filename = url.split("/")[-1]
+                link = page.locator(f'a[href*="{filename}"]').first
+                if await link.count() > 0:
+                    print(f"[CRAWLER]: Found link via href: {filename}")
+                    await link.click()
+                    found = True
+                
+                if not found:
+                    # Try by common text for schedule
+                    if "online-class-schedule" in url:
+                        link = page.get_by_role("link", name=re.compile("Online Class Schedule", re.I)).first
+                        if await link.count() > 0:
+                            print("[CRAWLER]: Found link via text: Online Class Schedule")
+                            await link.click()
+                            found = True
+                
+                if found:
+                    await page.wait_for_load_state("networkidle", timeout=30000)
+                else:
+                    print(f"[CRAWLER][FAIL]: Could not resolve navigation path for {url}")
+                    return
+            else:
+                await page.wait_for_load_state("networkidle", timeout=15000)
             
             # 1. Handle specialized pages (like tables in Online Classes)
             if "online-class-schedule" in url:

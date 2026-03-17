@@ -104,12 +104,11 @@ async def job(targets=None):
             print(f"[JOB]: Processing Semester {sem}...")
             backend_url = f"{API_URL}/api/sol/notifications/{sem}"
             try:
-                resp = requests.get(backend_url)
-                if resp.status_code != 200:
-                    print(f"[JOB][ERROR]: Could not fetch backend for sem {sem}")
+                backend_items = notifier.get_from_website(sem)
+                if backend_items is None: # Critical failure even after retries
+                    print(f"[JOB][ERROR]: Could not fetch backend for sem {sem} after retries")
                     continue
                     
-                backend_items = resp.json().get('data', [])
                 backend_items_map = {item.get('title'): item for item in backend_items}
 
                 # --- STEP A: SYNC / UPDATE ---
