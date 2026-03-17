@@ -53,27 +53,30 @@ async def job(targets=None):
         if targets is None or CLASS_URL in targets:
             print(f"[WATCHDOG]: Probing Class Schedule URL...")
             try:
-                # Use stealthy headers for the probe too
+                # Use very stealthy headers for the probe
                 probe_headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Cache-Control": "max-age=0",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1"
                 }
-                resp = requests.get(CLASS_URL, headers=probe_headers, timeout=15)
+                resp = requests.get(CLASS_URL, headers=probe_headers, timeout=20)
+                
                 if resp.status_code == 403:
-                    print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Will skip classes but proceed with rest.")
-                    # If this was a targeted class-only job, we can stop here
-                    if targets and len(targets) == 1 and targets[0] == CLASS_URL:
-                        return
+                    print(f"[WATCHDOG][WARNING]: Class Schedule returned 403 (Forbidden) to simple probe.")
+                    print(f"                     Will attempt deep scrape anyway as Playwright has better stealth.")
                 elif resp.status_code != 200:
-                    print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Proceeding with others.")
-                    if targets and len(targets) == 1 and targets[0] == CLASS_URL:
-                        return
+                    print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Attempting deep scrape anyway.")
                 else:
                     print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable!")
             except Exception as e:
-                print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Proceeding with others.")
-                if targets and len(targets) == 1 and targets[0] == CLASS_URL:
-                    return
+                print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Attempting deep scrape anyway.")
 
         # 1. RUN TARGETED OR EXHAUSTIVE SCRAPE
         found_notices = await scraper.run(days_back=7, targets=targets)
