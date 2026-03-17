@@ -32,7 +32,7 @@ class MBAScraper:
                 "Upgrade-Insecure-Requests": "1"
             }
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                user_agent=self.user_agent,
                 extra_http_headers=headers,
                 viewport={'width': 1366, 'height': 768},
                 locale="en-IN",
@@ -49,7 +49,7 @@ class MBAScraper:
             
             self.visited = set()
             self.notices = []
-            self.days_back = days_back
+            self.days_back = days_back if days_back is not None else self.days_back
             
             # Key targets for deep scan - PRIORITIZED Online Class Schedule
             all_targets = [
@@ -77,6 +77,9 @@ class MBAScraper:
             return
         self.visited.add(url)
         
+        # Log console messages from browser to Python stdout
+        page.on("console", lambda msg: print(f"[BROWSER]: {msg.text}"))
+        
         await asyncio.sleep(random.uniform(2.0, 4.0)) # Patient delay
 
         print(f"[CRAWLER][Depth {depth}]: Visiting {url}")
@@ -96,47 +99,43 @@ class MBAScraper:
                 if not force_human_navigation:
                     print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Legacy...")
                 
+                # V6: ULTRA-HUMAN LINK-CLICK TRANSITION
                 # Establish session/cookies from legacy home page first (Very reliable)
                 legacy_home = "https://sol.du.ac.in/home.php"
-                print(f"[CRAWLER]: Touching Legacy Home {legacy_home} to establish session...")
-                await page.goto(legacy_home, wait_until="domcontentloaded", timeout=45000)
-                await asyncio.sleep(random.uniform(5, 10))
+                print(f"[CRAWLER]: Visiting Legacy Home {legacy_home}...")
+                await page.goto(legacy_home, wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(random.uniform(5, 8))
                 
-                # Now jump to Modern Home
-                print(f"[CRAWLER]: Transitioning to Modern Home {self.base_url}...")
-                await page.goto(self.base_url, wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(random.uniform(5, 10))
-                
-                # Dynamic Link Search
                 found = False
-                
-                # Special handling for Online Class Schedule (Students menu)
                 if "online-class-schedule" in url:
                     try:
-                        print("[CRAWLER]: Interacting with Navigation Menu...")
-                        # 1. Try to directly click the link with force=True (handles hidden/covered elements)
-                        link = page.locator("a[href*='online-class-schedule']").first
-                        if await link.count() > 0:
-                            print(f"[CRAWLER]: Found link via href, clicking aggressively...")
-                            await link.click(force=True, timeout=5000)
+                        print("[CRAWLER]: Clicking transition button to Modern Portal...")
+                        # Find the large blue 'Online Class Schedule' button on the legacy page
+                        transition_btn = page.locator("a[href*='online-class-schedule']").first
+                        if await transition_btn.count() > 0:
+                            print(f"[CRAWLER]: Found transition button, clicking naturally...")
+                            await transition_btn.click() # Natural click
+                            # Wait for load - slightly less strict than networkidle for this site
+                            await page.wait_for_load_state("load", timeout=60000)
+                            await asyncio.sleep(random.uniform(10, 15)) # Ultra-patient
                             found = True
-                        
-                        if not found:
-                            # 2. Try to hover/click the 'Students' parent first
-                            print("[CRAWLER]: Clicking 'Students' menu to reveal links...")
-                            students_menu = page.locator("text='Students'").first
-                            if await students_menu.count() > 0:
-                                await students_menu.click(force=True)
-                                await asyncio.sleep(1)
-                            
-                            # Search for 'Online Classes' or similar text
-                            link = page.locator("a").filter(has_text=re.compile(r"Online Classes|Online Class Schedule", re.I)).first
-                            if await link.count() > 0:
-                                print(f"[CRAWLER]: Found link via text: {await link.inner_text()}")
-                                await link.click(force=True)
-                                found = True
+                        else:
+                            print("[CRAWLER][WARNING]: Transition button not found on legacy page.")
                     except Exception as e:
-                        print(f"[CRAWLER][DEBUG]: Menu navigation attempt failed: {e}")
+                        print(f"[CRAWLER][ERROR]: Transition click failed: {e}")
+
+                if not found:
+                    # Fallback to direct transition if click failed or for other URLs
+                    print(f"[CRAWLER]: Falling back to direct transition to {url}...")
+                    await page.goto(url, wait_until="networkidle", timeout=60000)
+                    await asyncio.sleep(random.uniform(5, 10))
+                    found = True # Assume success if no exception
+                
+                if found:
+                    await page.wait_for_load_state("networkidle", timeout=60000)
+                else:
+                    print(f"[CRAWLER][FAIL]: Could not resolve navigation path for {url}")
+                    return
 
                 if not found:
                     # Generic Fallback: Try by href fragment
@@ -195,169 +194,134 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # Try direct visit first, if 403, try navigating from Home
-        if "403" in page.url or "Forbidden" in await page.title():
-            print("[CRAWLER]: Direct visit blocked (403). Attempting human-like navigation from Home...")
-            await page.goto(self.base_url, wait_until="networkidle", timeout=60000)
-            await asyncio.sleep(random.uniform(2, 5))
-            try:
-                # Target the schedule link - using flexible text matching
-                link = page.get_by_role("link", name=re.compile("Online Class Schedule", re.I))
-                if await link.count() > 0:
-                    await link.first.click()
-                    await page.wait_for_load_state("networkidle")
-                else:
-                    # Fallback for dropdowns or hidden menus
-                    await page.locator("text='Students'").hover()
-                    await asyncio.sleep(1)
-                    await page.locator("text='Online Class Schedule'").click()
-                    await page.wait_for_load_state("networkidle")
-            except Exception as e:
-                print(f"[CRAWLER][ERROR]: Human navigation failed: {e}")
-                return
-
-        print("[CRAWLER]: Scrolling deeply to load all class entries (Patient Mode)...")
-        await self.auto_scroll(page)
-        await asyncio.sleep(5) # Extra wait for lazy content
+        # V6.6: DIRECT IFRAME EXTRACTION
+        # The main site nests the schedule in this iframe. Direct access is more reliable.
+        iframe_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
+        print(f"[CRAWLER]: Directly visiting schedule provider: {iframe_url}")
         
-        # Capture Top Timetable Buttons (MBA focus)
-        print("[CRAWLER]: Checking for MBA Timetable buttons at the top...")
-        top_links = await page.evaluate("""() => {
-            const btns = Array.from(document.querySelectorAll('a.btn, .btn, a')).filter(a => 
-                a.innerText.toUpperCase().includes('MBA') && 
-                (a.innerText.toUpperCase().includes('TIMETABLE') || a.innerText.toUpperCase().includes('SCHEDULE'))
-            );
-            return btns.map(a => ({ title: a.innerText.trim(), href: a.href }));
-        }""")
-        for link in top_links:
-            if link['href'] and link['href'] not in [n['link'] for n in self.notices]:
-                print(f"[CRAWLER][HEADER FOUND]: {link['title']}")
-                self.notices.append({
-                    "title": f"[OFFICIAL] {link['title']}",
-                    "link": link['href'],
-                    "semester": self.extract_semester_logic(link['title']),
-                    "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                    "description": "Official MBA Time Table / Schedule from DU SOL"
-                })
-
-        print("[CRAWLER]: Parsing Online Class Schedule table...")
         try:
-            # Each date has its own section/header and table
-            sections = await page.evaluate("""() => {
-                const results = [];
-                // Look for elements containing 'Date:'
-                const elements = Array.from(document.querySelectorAll('h4, h5, p, b, strong'));
-                elements.forEach(el => {
-                    const text = el.innerText.trim();
-                    if (text.toLowerCase().includes('date:')) {
-                        // Attempt to find the next table
-                        let next = el.nextElementSibling;
-                        let foundTable = null;
-                        
-                        // Search for table in next siblings or their children
-                        let sibling = next;
-                        let limit = 5; // Search up to 5 siblings
-                        while (sibling && limit > 0) {
-                            if (sibling.tagName === 'TABLE') {
-                                foundTable = sibling;
-                                break;
-                            }
-                            const tableInSibling = sibling.querySelector('table');
-                            if (tableInSibling) {
-                                foundTable = tableInSibling;
-                                break;
-                            }
-                            sibling = sibling.nextElementSibling;
-                            if (sibling && (sibling.tagName === 'H4' || sibling.tagName === 'H5') && sibling.innerText.toLowerCase().includes('date:')) break;
-                            limit--;
-                        }
-                        
-                        if (foundTable) {
-                            results.push({
-                                date_str: text.split(':')[1].trim(),
-                                rows: Array.from(foundTable.querySelectorAll('tr')).map(tr => 
-                                    Array.from(tr.querySelectorAll('td')).map(td => {
-                                        const a = td.querySelector('a');
-                                        return {
-                                            text: td.innerText.trim(),
-                                            href: a ? a.href : null
-                                        };
-                                    })
-                                )
-                            });
-                        }
-                    }
-                });
-                return results;
-            }""")
+            await page.goto(iframe_url, wait_until="load", timeout=60000)
+            await asyncio.sleep(5)
+            await self.auto_scroll(page)
+            await asyncio.sleep(5) # Extra wait for lazy-loaded table contents
+        except Exception as e:
+            print(f"[CRAWLER][WARNING]: Direct iframe visit failed: {e}")
 
-            for block in sections:
-                date_str = block.get('date_str', '')
-                rows = block.get('rows', [])
+        print("[CRAWLER]: Parsing Online Class Schedule tables (Hyper-Robust)...")
+        try:
+            # Capture ALL tables from ALL frames to be safe
+            all_raw_tables = []
+            for frame in page.frames:
+                try:
+                    tables_data = await frame.evaluate("""() => {
+                        return Array.from(document.querySelectorAll('table')).map(table => {
+                            return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                Array.from(tr.querySelectorAll('td')).map(td => {
+                                    const a = td.querySelector('a');
+                                    return { text: td.innerText.trim(), href: a ? a.href : null };
+                                })
+                            );
+                        });
+                    }""")
+                    if tables_data: all_raw_tables.extend(tables_data)
+                except: continue
+
+            print(f"[CRAWLER][DEBUG]: Found {len(all_raw_tables)} raw tables.")
+            
+            for rows in all_raw_tables:
+                # Find date within this specific table
+                date_str = None
+                for row in rows:
+                    combined_text = " ".join([c['text'] for c in row])
+                    if 'date:' in combined_text.lower():
+                        date_str = combined_text.split(':')[1].strip()
+                        break
+                
+                if not date_str: continue
                 
                 for cells in rows:
-                    if len(cells) >= 6: # New structure: Course | Year/Sem | Subject | Medium | Time | Teacher | Link
-                        course_text = cells[0]['text']
-                        sem_text = cells[1]['text']
-                        subject_text = cells[2]['text']
-                        time_text = cells[4]['text']
-                        link_data = cells[6] if len(cells) > 6 else (cells[-1] if len(cells) > 0 else None)
-                        href = link_data['href'] if link_data else None
+                    if len(cells) < 4: continue
+                    
+                    # Combine all text for fuzzy course matching
+                    row_text = " ".join([c['text'] for c in cells])
+                    if not any(kw.lower() in row_text.lower() for kw in self.keywords):
+                        continue
                         
-                        # Apply strict Course filter
-                        is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
-                        if is_mba_course:
-                            semester = self.extract_semester_logic(sem_text if sem_text else course_text)
-                            if semester == "0": semester = self.extract_semester_logic(course_text)
-                            
-                            title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
-                            
-                            # Handle placeholder links (like '...', 'Login', 'Available Soon')
-                            link_text = link_data.get('text', '').strip() if link_data else ""
-                            final_link = href
-                            
-                            # Aggressive pending detection
-                            is_pending = (
-                                not href or 
-                                "online-class-schedule" in href or 
-                                "..." in href or 
-                                "..." in link_text or 
-                                "login" in link_text.lower() or 
-                                "available soon" in link_text.lower() or
-                                len(link_text) < 4
-                            )
-                            
-                            if is_pending:
-                                print(f"[SCRAPE]: Found pending link for: {subject_text}")
-                                final_link = "#pending"
-                            
-                            # Get current date in IST
-                            now_utc = datetime.datetime.utcnow()
-                            ist_offset = datetime.timedelta(hours=5, minutes=30)
-                            current_date_ist = (now_utc + ist_offset).date()
-                            
-                            # Parse item date robustly
-                            item_date_obj = self._normalize_date(date_str)
-                            
-                            # HARD FILTER: Don't scrape anything older than today
-                            if item_date_obj and item_date_obj < current_date_ist:
-                                print(f"[SCRAPE][SKIP OLD]: {subject_text} is from {date_str} (Yesterday/Old)")
-                                continue
+                    # Extract fields with fallback indexing
+                    course_text = cells[0]['text']
+                    sem_text = cells[1]['text']
+                    subject_text = cells[2]['text']
+                    
+                    # Find Time (looking for AM/PM or HH:MM)
+                    time_text = ""
+                    for c in cells:
+                        if re.search(r'\d{1,2}:\d{2}', c['text']):
+                            time_text = c['text']
+                            break
+                    
+                    # Find Link
+                    href = None
+                    link_data = None # Initialize link_data
+                    for c in reversed(cells):
+                        if c['href'] and ('teams.microsoft.com' in c['href'] or 'join' in c['text'].lower()):
+                            href = c['href']
+                            link_data = c # Store the cell data for link_text
+                            break
+                        
+                    # Apply strict Course filter
+                    is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
+                    if is_mba_course:
+                        semester = self.extract_semester_logic(sem_text if sem_text else course_text)
+                        if semester == "0": semester = self.extract_semester_logic(course_text)
+                        
+                        title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
+                        
+                        # Handle placeholder links (like '...', 'Login', 'Available Soon')
+                        link_text = link_data.get('text', '').strip() if link_data else ""
+                        final_link = href
+                        
+                        # Aggressive pending detection
+                        is_pending = (
+                            not href or 
+                            "online-class-schedule" in href or 
+                            "..." in href or 
+                            "..." in link_text or 
+                            "login" in link_text.lower() or 
+                            "available soon" in link_text.lower() or
+                            len(link_text) < 4
+                        )
+                        
+                        if is_pending:
+                            print(f"[SCRAPE]: Found pending link for: {subject_text}")
+                            final_link = "#pending"
+                        
+                        # Get current date in IST
+                        now_utc = datetime.datetime.utcnow()
+                        ist_offset = datetime.timedelta(hours=5, minutes=30)
+                        current_date_ist = (now_utc + ist_offset).date()
+                        
+                        # Parse item date robustly
+                        item_date_obj = self._normalize_date(date_str)
+                        
+                        # HARD FILTER: Don't scrape anything older than today
+                        if item_date_obj and item_date_obj < current_date_ist:
+                            print(f"[SCRAPE][SKIP OLD]: {subject_text} is from {date_str} (Yesterday/Old)")
+                            continue
 
-                            # Dynamic Description: Today vs Tomorrow
-                            desc_prefix = "[TODAY]" if item_date_obj == current_date_ist else "[TOMORROW]"
-                            # Add IST time for extra clarity in description if needed
-                            description = f"{desc_prefix} MBA Live Class: {subject_text}. Time: {time_text}."
+                        # Dynamic Description: Today vs Tomorrow
+                        desc_prefix = "[TODAY]" if item_date_obj == current_date_ist else "[TOMORROW]"
+                        # Add IST time for extra clarity in description if needed
+                        description = f"{desc_prefix} MBA Live Class: {subject_text}. Time: {time_text}."
 
-                            self.notices.append({
-                                "title": title.strip(),
-                                "link": final_link,
-                                "semester": semester,
-                                "date": self.parse_date(date_str),
-                                "class_time": time_text.strip(),
-                                "description": description
-                            })
-                            print(f"[CRAWLER][CLASS FOUND]: {title} (Link: {final_link})")
+                        self.notices.append({
+                            "title": title.strip(),
+                            "link": final_link,
+                            "semester": semester,
+                            "date": self.parse_date(date_str),
+                            "class_time": time_text.strip(),
+                            "description": description
+                        })
+                        print(f"[CRAWLER][CLASS FOUND]: {title} (Link: {final_link})")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Online classes parsing failed: {e}")
 

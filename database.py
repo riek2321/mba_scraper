@@ -22,6 +22,7 @@ class ScraperDatabase:
                     title TEXT,
                     semester TEXT,
                     processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_deleted INTEGER DEFAULT 0,
                     UNIQUE(link, title)
                 )
             ''')

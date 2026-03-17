@@ -120,9 +120,16 @@ async def job(targets=None):
                     backend_item = backend_items_map.get(title)
                     
                     if not backend_item:
+                        # NEW or DELETED: If it's in our DB but not backend, it was likely processed once and then deleted.
+                        # We only sync if it's NOT in our DB.
                         if db.save_link(link, title, sem):
+                            print(f"[JOB]: New item found, syncing to backend: {title}")
                             notice['semester'] = sem
                             notifier.sync_to_website(notice)
+                        else:
+                            # Already in DB but missing from backend = Already processed + Deleted by admin.
+                            # We respect the deletion and DON'T re-sync.
+                            pass
                     else:
                         # EXISTING: Update if link or description changed
                         curr_link = backend_item.get('link', '')
@@ -236,11 +243,13 @@ async def job(targets=None):
 
 
         # 5. LOCAL DB CLEANUP
-        fifteen_days_ago = datetime.datetime.now() - datetime.timedelta(days=15)
+        # PERPETUAL MEMORY: Keep records for 365 days to remember admin deletions
+        one_year_ago = datetime.datetime.now() - datetime.timedelta(days=365)
         with sqlite3.connect(db.db_path) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute("DELETE FROM notices WHERE processed_at < ?", (fifteen_days_ago.isoformat(),))
+                # Keep items for a full year to prevent re-syncing items deleted by admin
+                cursor.execute("DELETE FROM notices WHERE date < ?", (one_year_ago.strftime("%Y-%m-%d"),))
             except: pass
 
         print(f"[JOB]: Finished Scraper Job.")
