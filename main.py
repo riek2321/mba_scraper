@@ -27,8 +27,8 @@ def run_health_server():
     print(f"[HEALTH]: Started on port {port}")
     server.serve_forever()
 
-async def job():
-    print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Scraper Job...")
+async def job(targets=None):
+    print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Scraper Job (Targeted: {targets is not None})...")
     
     # Configuration via environment variables
     API_URL = os.environ.get("BACKEND_API_URL", "https://solmates-backend.onrender.com")
@@ -48,26 +48,36 @@ async def job():
     try:
         # Pre-Check for Online Class Schedule (Watchdog)
         CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
-        print(f"[WATCHDOG]: Probing Class Schedule URL...")
-        try:
-            # Use stealthy headers for the probe too
-            probe_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-            }
-            resp = requests.get(CLASS_URL, headers=probe_headers, timeout=15)
-            if resp.status_code == 403:
-                print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Will skip classes but proceed with rest.")
-            elif resp.status_code != 200:
-                print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Proceeding with others.")
-            else:
-                print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable! Starting Deep Scan.")
-        except Exception as e:
-            print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Proceeding with others.")
+        
+        # Only probe if classes are in our targets (or if targets is None for full scan)
+        if targets is None or CLASS_URL in targets:
+            print(f"[WATCHDOG]: Probing Class Schedule URL...")
+            try:
+                # Use stealthy headers for the probe too
+                probe_headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                }
+                resp = requests.get(CLASS_URL, headers=probe_headers, timeout=15)
+                if resp.status_code == 403:
+                    print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Will skip classes but proceed with rest.")
+                    # If this was a targeted class-only job, we can stop here
+                    if targets and len(targets) == 1 and targets[0] == CLASS_URL:
+                        return
+                elif resp.status_code != 200:
+                    print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Proceeding with others.")
+                    if targets and len(targets) == 1 and targets[0] == CLASS_URL:
+                        return
+                else:
+                    print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable!")
+            except Exception as e:
+                print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Proceeding with others.")
+                if targets and len(targets) == 1 and targets[0] == CLASS_URL:
+                    return
 
-        # 1. RUN EXHAUSTIVE SCRAPE
-        found_notices = await scraper.run(days_back=7)
-        print(f"[JOB]: Deep Scan found {len(found_notices)} possible MBA items.")
+        # 1. RUN TARGETED OR EXHAUSTIVE SCRAPE
+        found_notices = await scraper.run(days_back=7, targets=targets)
+        print(f"[JOB]: Scan found {len(found_notices)} possible MBA items.")
         
         # 2. TRACK CURRENT ITEMS (For presence check)
         current_item_titles = set()
@@ -249,11 +259,29 @@ async def main():
         return
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MBA Scraper Service Initializing...")
-    print(f"Interval: 2 minutes | IST-Aware Cleanup: ENABLED")
+    print(f"Mode: ULTRA-FAST Watchdog | Pulse: 40s | Full Scan: 120s")
+    
+    pulse_index = 0
+    CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
+    
     while True:
-        await job()
-        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Scan complete. Next check in 120 seconds...")
-        await asyncio.sleep(120)
+        try:
+            # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (120 seconds)
+            if pulse_index % 3 == 0:
+                print(f"\n[PULSE {pulse_index}]: Triggering FULL SCAN...")
+                await job(targets=None) 
+            else:
+                # Other pulses run TARGETED CLASS SCAN (every 40 seconds)
+                print(f"\n[PULSE {pulse_index}]: Triggering TARGETED CLASS SCAN...")
+                await job(targets=[CLASS_URL])
+            
+            pulse_index += 1
+            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 40 seconds...")
+            await asyncio.sleep(40)
+            
+        except Exception as e:
+            print(f"[MAIN][ERROR]: Loop error: {e}")
+            await asyncio.sleep(60) # Recover delay
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -12,7 +12,7 @@ class MBAScraper:
         self.notices = []
         self.days_back = None
 
-    async def run(self, days_back=None):
+    async def run(self, days_back=None, targets=None):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             # Improved Stealth Headers
@@ -42,7 +42,7 @@ class MBAScraper:
             self.days_back = days_back
             
             # Key targets for deep scan - PRIORITIZED Online Class Schedule
-            start_urls = [
+            all_targets = [
                 "https://web.sol.du.ac.in/info/online-class-schedule",
                 self.base_url,
                 "https://web.sol.du.ac.in/info/archive-notices-information",
@@ -51,7 +51,9 @@ class MBAScraper:
                 "https://sol.du.ac.in/home.php"
             ]
             
-            print(f"[CRAWLER]: Starting Deep Scan of {len(start_urls)} target areas")
+            start_urls = targets if targets else all_targets
+            
+            print(f"[CRAWLER]: Starting scan of {len(start_urls)} target areas")
             for url in start_urls:
                 # Add a small random delay between start URLs to seem more human
                 import random
