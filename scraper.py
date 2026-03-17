@@ -55,7 +55,6 @@ class MBAScraper:
             
             # Key targets for deep scan - PRIORITIZED Online Class Schedule
             all_targets = [
-                "https://web.sol.du.ac.in/my/team_schedules/vcs.php",
                 "https://web.sol.du.ac.in/info/online-class-schedule",
                 self.base_url,
                 "https://web.sol.du.ac.in/info/archive-notices-information",
@@ -99,40 +98,54 @@ class MBAScraper:
                 print(f"[CRAWLER]: Enforcing Mandatory Human Flow for {url}")
             
             if is_blocked:
-                if not force_human_navigation:
-                    print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Legacy...")
+                print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Legacy...")
                 
-                # V6: ULTRA-HUMAN LINK-CLICK TRANSITION
-                # Establish session/cookies from legacy home page first (Very reliable)
+                # V6.8: ULTRA-HUMAN LINK-CLICK TRANSITION (Broadened)
+                # Establish session/cookies from legacy home page first
                 legacy_home = "https://sol.du.ac.in/home.php"
-                print(f"[CRAWLER]: Visiting Legacy Home {legacy_home}...")
-                await page.goto(legacy_home, wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(random.uniform(5, 8))
+                print(f"[CRAWLER]: Visiting Legacy Home {legacy_home} (Patient Mode)...")
+                try:
+                    await page.goto(legacy_home, wait_until="domcontentloaded", timeout=120000)
+                    await asyncio.sleep(random.uniform(5, 10))
+                except Exception as e:
+                    print(f"[CRAWLER][WARNING]: Legacy home failed to load ({e}). Proceeding to direct visit...")
                 
                 found = False
                 if "online-class-schedule" in url:
                     try:
-                        print("[CRAWLER]: Clicking transition button to Modern Portal...")
-                        # Find the large blue 'Online Class Schedule' button on the legacy page
+                        print("[CRAWLER]: Clicking transition button for Online Classes...")
+                        # Target ANY link containing 'online-class-schedule'
                         transition_btn = page.locator("a[href*='online-class-schedule']").first
                         if await transition_btn.count() > 0:
                             print(f"[CRAWLER]: Found transition button, clicking naturally...")
-                            await transition_btn.click() # Natural click
-                            # Wait for load - slightly less strict than networkidle for this site
-                            await page.wait_for_load_state("load", timeout=60000)
-                            await asyncio.sleep(random.uniform(10, 15)) # Ultra-patient
+                            await transition_btn.click()
+                            await page.wait_for_load_state("load", timeout=90000)
+                            await asyncio.sleep(random.uniform(10, 15))
                             found = True
                         else:
-                            print("[CRAWLER][WARNING]: Transition button not found on legacy page.")
+                            print("[CRAWLER][WARNING]: Transition button 'online-class-schedule' not found.")
                     except Exception as e:
                         print(f"[CRAWLER][ERROR]: Transition click failed: {e}")
 
                 if not found:
-                    # Fallback to direct transition if click failed or for other URLs
+                    # General Fallback for any 403: Try to find a matching link on the page
+                    try:
+                        short_url = url.split('/')[-1] if '/' in url else url
+                        link = page.locator(f"a[href*='{short_url}']").first
+                        if await link.count() > 0:
+                            print(f"[CRAWLER]: Found matching link for {short_url}, clicking...")
+                            await link.click()
+                            await page.wait_for_load_state("load", timeout=60000)
+                            await asyncio.sleep(8)
+                            found = True
+                    except: pass
+
+                if not found:
+                    # Last resort: direct visit with session cookies established
                     print(f"[CRAWLER]: Falling back to direct transition to {url}...")
-                    await page.goto(url, wait_until="networkidle", timeout=60000)
+                    await page.goto(url, wait_until="load", timeout=60000)
                     await asyncio.sleep(random.uniform(5, 10))
-                    found = True # Assume success if no exception
+                    found = True
                 
                 if found:
                     await page.wait_for_load_state("networkidle", timeout=60000)
@@ -197,18 +210,13 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V6.6: DIRECT IFRAME EXTRACTION
-        # The main site nests the schedule in this iframe. Direct access is more reliable.
-        iframe_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
-        print(f"[CRAWLER]: Directly visiting schedule provider: {iframe_url}")
-        
-        try:
-            await page.goto(iframe_url, wait_until="load", timeout=60000)
-            await asyncio.sleep(5)
-            await self.auto_scroll(page)
-            await asyncio.sleep(5) # Extra wait for lazy-loaded table contents
-        except Exception as e:
-            print(f"[CRAWLER][WARNING]: Direct iframe visit failed: {e}")
+        # V6.8: TRUSTED IFRAME CONTENT
+        # We no longer goto() the iframe directly as it triggers 403. 
+        # Instead we wait for the parent page to load it and then parse all frames.
+        print(f"[CRAWLER]: Waiting for schedule iframe content to stabilize...")
+        await asyncio.sleep(15) 
+        await self.auto_scroll(page)
+        await asyncio.sleep(5) 
 
         print("[CRAWLER]: Parsing Online Class Schedule tables (Hyper-Robust)...")
         try:
