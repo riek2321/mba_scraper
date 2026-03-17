@@ -16,22 +16,27 @@ class MBAScraper:
     async def run(self, days_back=None, targets=None):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            # V2 STEALTH: Minimalist headers, let Playwright handle dynamic flow
+            # V5 STEALTH: Advanced Human Fingerprinting
             headers = {
                 "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Cache-Control": "max-age=0",
-                "DNT": "1"
+                "DNT": "1",
+                "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Upgrade-Insecure-Requests": "1"
             }
-            # EXTREME STEALTH: Match regional profile
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 extra_http_headers=headers,
-                viewport={'width': 1280 + random.randint(-20, 20), 'height': 800 + random.randint(-20, 20)},
-                device_scale_factor=random.choice([1, 2]),
+                viewport={'width': 1366, 'height': 768},
                 locale="en-IN",
-                timezone_id="Asia/Kolkata",
-                ignore_https_errors=True
+                timezone_id="Asia/Kolkata"
             )
             page = await context.new_page()
             # Advanced Evasive markers (V2)
@@ -89,11 +94,18 @@ class MBAScraper:
             
             if is_blocked:
                 if not force_human_navigation:
-                    print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Home...")
+                    print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Attempting Human-like navigation from Legacy...")
                 
-                # Establish session/cookies from home page
-                await page.goto(self.base_url, wait_until="networkidle", timeout=45000)
-                await asyncio.sleep(random.uniform(3, 5))
+                # Establish session/cookies from legacy home page first (Very reliable)
+                legacy_home = "https://sol.du.ac.in/home.php"
+                print(f"[CRAWLER]: Touching Legacy Home {legacy_home} to establish session...")
+                await page.goto(legacy_home, wait_until="domcontentloaded", timeout=45000)
+                await asyncio.sleep(random.uniform(5, 10))
+                
+                # Now jump to Modern Home
+                print(f"[CRAWLER]: Transitioning to Modern Home {self.base_url}...")
+                await page.goto(self.base_url, wait_until="networkidle", timeout=60000)
+                await asyncio.sleep(random.uniform(5, 10))
                 
                 # Dynamic Link Search
                 found = False
