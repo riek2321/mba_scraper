@@ -15,17 +15,36 @@ class MBAScraper:
     async def run(self, days_back=None):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            # Improved Stealth Headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Cache-Control": "max-age=0"
+            }
+            context = await browser.new_context(
+                user_agent=headers["User-Agent"],
+                extra_http_headers=headers,
+                viewport={'width': 1280, 'height': 800}
+            )
             page = await context.new_page()
             
             self.visited = set()
             self.notices = []
             self.days_back = days_back
             
-            # Key targets for deep scan
+            # Key targets for deep scan - PRIORITIZED Online Class Schedule
             start_urls = [
-                self.base_url,
                 "https://web.sol.du.ac.in/info/online-class-schedule",
+                self.base_url,
                 "https://web.sol.du.ac.in/info/archive-notices-information",
                 "https://web.sol.du.ac.in/student-academic-information",
                 "https://sol.du.ac.in/all-notices.php",
@@ -34,7 +53,10 @@ class MBAScraper:
             
             print(f"[CRAWLER]: Starting Deep Scan of {len(start_urls)} target areas")
             for url in start_urls:
-                await self.crawl(page, url, depth=0, max_depth=1) # Reduced depth for stability, more start points
+                # Add a small random delay between start URLs to seem more human
+                import random
+                await asyncio.sleep(random.uniform(1.5, 3.5))
+                await self.crawl(page, url, depth=0, max_depth=1) 
             
             await browser.close()
             return self.notices
@@ -44,10 +66,19 @@ class MBAScraper:
             return
         self.visited.add(url)
         
+        import random
+        await asyncio.sleep(random.uniform(1.0, 2.5)) # Human-like delay
+
         print(f"[CRAWLER][Depth {depth}]: Visiting {url}")
         try:
-            await page.goto(url, timeout=30000)
-            await page.wait_for_load_state("networkidle")
+            # Set a more realistic timeout and handle 403 gracefully
+            response = await page.goto(url, timeout=45000, wait_until="domcontentloaded")
+            
+            if response and response.status == 403:
+                print(f"[CRAWLER][WARNING]: 403 Forbidden for {url}. Site might be blocking or offline.")
+                return
+
+            await page.wait_for_load_state("networkidle", timeout=15000)
             
             # 1. Handle specialized pages (like tables in Online Classes)
             if "online-class-schedule" in url:

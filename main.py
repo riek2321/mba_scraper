@@ -46,6 +46,30 @@ async def job():
         is_empty = cursor.fetchone()[0] == 0
 
     try:
+        # Pre-Check for Online Class Schedule (Watchdog)
+        CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
+        print(f"[WATCHDOG]: Probing Class Schedule URL...")
+        try:
+            # Use stealthy headers for the probe too
+            probe_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+            resp = requests.get(CLASS_URL, headers=probe_headers, timeout=15)
+            if resp.status_code == 403:
+                print(f"[WATCHDOG][OFFLINE]: Class Schedule is 403 Forbidden. Skipping Deep Scan.")
+                # We still run a limited scan if it's been a while, but for now we trust the watchdog
+                # found_notices = await scraper.run(days_back=1) # Minimal run
+                return 
+            elif resp.status_code != 200:
+                print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Skipping.")
+                return
+            else:
+                print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable! Starting Deep Scan.")
+        except Exception as e:
+            print(f"[WATCHDOG][FAIL]: Connection failed: {e}")
+            return
+
         # 1. RUN EXHAUSTIVE SCRAPE
         found_notices = await scraper.run(days_back=7)
         print(f"[JOB]: Deep Scan found {len(found_notices)} possible MBA items.")
