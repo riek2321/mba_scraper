@@ -55,6 +55,7 @@ class MBAScraper:
             
             # Key targets for deep scan - PRIORITIZED Online Class Schedule
             all_targets = [
+                "https://web.sol.du.ac.in/my/team_schedules/vcs.php",
                 "https://web.sol.du.ac.in/info/online-class-schedule",
                 self.base_url,
                 "https://web.sol.du.ac.in/info/archive-notices-information",
@@ -278,17 +279,19 @@ class MBAScraper:
                         
                         title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
                         
-                        # Handle placeholder links (like '...', 'Login', 'Available Soon')
+                        # Robust Pending Detection
                         link_text = link_data.get('text', '').strip() if link_data else ""
                         final_link = href
                         
-                        # Aggressive pending detection
+                        # V6.7: If it's a real Teams URL, it's NOT pending, regardless of 'Login' text
+                        is_teams_link = href and "teams.microsoft.com" in href
+                        
                         is_pending = (
                             not href or 
-                            "online-class-schedule" in href or 
+                            ("online-class-schedule" in href and not is_teams_link) or 
                             "..." in href or 
                             "..." in link_text or 
-                            "login" in link_text.lower() or 
+                            ("login" in link_text.lower() and not is_teams_link) or 
                             "available soon" in link_text.lower() or
                             len(link_text) < 4
                         )
@@ -550,8 +553,9 @@ class MBAScraper:
                         notice_date = datetime.datetime.strptime(date_match.group(1), "%d-%m-%Y")
                     except: pass
                 
-                # STRICT YEAR FILTER: Ignore anything from 2025 or older
-                if "2025" in text or notice_date.year < 2026:
+                # Recency Filter: Rely on notice_date and days_back
+                # Only absolute cutoff is 2024 or older to avoid archival noise
+                if notice_date.year < 2025:
                     print(f"[CRAWLER][SKIP OLD]: {text.strip()} ({notice_date.year})")
                     continue
                 
