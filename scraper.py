@@ -30,12 +30,23 @@ class MBAScraper:
                 "Sec-Fetch-User": "?1",
                 "Cache-Control": "max-age=0"
             }
+            # EXTREME STEALTH: Match regional profile
             context = await browser.new_context(
-                user_agent=headers["User-Agent"],
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 extra_http_headers=headers,
-                viewport={'width': 1280, 'height': 800}
+                viewport={'width': 1280 + random.randint(-20, 20), 'height': 800 + random.randint(-20, 20)},
+                device_scale_factor=random.choice([1, 1.25, 1.5]),
+                locale="en-IN",
+                timezone_id="Asia/Kolkata",
+                permissions=["geolocation"],
+                ignore_https_errors=True
             )
             page = await context.new_page()
+            # Evasive markers
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = { runtime: {} };
+            """)
             
             self.visited = set()
             self.notices = []
@@ -120,6 +131,9 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
+        print("[CRAWLER]: Scrolling to load all class entries...")
+        await self.auto_scroll(page)
+        
         print("[CRAWLER]: Parsing Online Class Schedule table...")
         try:
             # Each date has its own section/header and table
@@ -337,19 +351,32 @@ class MBAScraper:
     def extract_semester_logic(self, text):
         if not text: return "0"
         import re
-        # Standard Sem 1, Semester 1
+        
+        # 1. Roman Numerals: Semester IV, Sem III, etc.
+        roman_map = {"IV": "4", "III": "3", "II": "2", "I": "1"}
+        for rom, num in roman_map.items():
+            if re.search(rf'\b(Sem(?:ester)?|Year)?\b\s*{rom}\b', text, re.I):
+                return num
+
+        # 2. Standard Sem 1, Semester 1
         sem_match = re.search(r'(Sem(?:ester)?\s*([1-4]))', text, re.I)
         if sem_match: return sem_match.group(2)
         
-        # Ordinal format: 1st SEM, 2nd SEM, 3rd SEM, 4th SEM
+        # 3. Ordinal format: 1st SEM, 2nd SEM, 3rd SEM, 4th SEM
         ordinal_match = re.search(r'([1-4])(?:st|nd|rd|th)?\s*SEM', text, re.I)
         if ordinal_match: return ordinal_match.group(1)
         
-        # Word format
-        if "First" in text or "1st" in text: return "1"
-        if "Second" in text or "2nd" in text: return "2"
-        if "Third" in text or "3rd" in text: return "3"
-        if "Fourth" in text or "4th" in text: return "4"
+        # 4. Word format (expanded)
+        word_map = {"First": "1", "Second": "2", "Third": "3", "Fourth": "4"}
+        for word, num in word_map.items():
+            if word.lower() in text.lower(): return num
+        
+        # 5. Simple Digit fallbacks
+        if "sem-4" in text.lower() or "sem4" in text.lower(): return "4"
+        if "sem-3" in text.lower() or "sem3" in text.lower(): return "3"
+        if "sem-2" in text.lower() or "sem2" in text.lower(): return "2"
+        if "sem-1" in text.lower() or "sem1" in text.lower(): return "1"
+
         return "0"
 
     def _normalize_date(self, date_str):
@@ -401,6 +428,25 @@ class MBAScraper:
                         await asyncio.sleep(1) # Wait for animation/load
             except:
                 continue
+
+    async def auto_scroll(self, page):
+        """Smoothly scroll to the bottom of the page to load all content."""
+        await page.evaluate("""async () => {
+            await new Promise((resolve) => {
+                let totalHeight = 0;
+                let distance = 100;
+                let timer = setInterval(() => {
+                    let scrollHeight = document.body.scrollHeight;
+                    window.scrollBy(0, distance);
+                    totalHeight += distance;
+                    if(totalHeight >= scrollHeight){
+                        clearInterval(timer);
+                        resolve();
+                    }
+                }, 100);
+            });
+        }""")
+        await asyncio.sleep(2) # Give a moment for content to settle
 
     async def extract_mba_content(self, page):
         """Find links and content matching MBA keywords"""

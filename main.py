@@ -262,25 +262,25 @@ async def main():
         return
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MBA Scraper Service Initializing...")
-    print(f"Mode: ULTRA-FAST Watchdog | Pulse: 40s | Full Scan: 120s")
+    print(f"Mode: ULTRA-FAST Watchdog | Pulse: 60s | Full Scan: 180s")
     
     pulse_index = 0
     CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
     
     while True:
         try:
-            # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (120 seconds)
+            # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (180 seconds)
             if pulse_index % 3 == 0:
                 print(f"\n[PULSE {pulse_index}]: Triggering FULL SCAN...")
                 await job(targets=None) 
             else:
-                # Other pulses run TARGETED CLASS SCAN (every 40 seconds)
+                # Other pulses run TARGETED CLASS SCAN (every 60 seconds)
                 print(f"\n[PULSE {pulse_index}]: Triggering TARGETED CLASS SCAN...")
                 await job(targets=[CLASS_URL])
             
             pulse_index += 1
-            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 40 seconds...")
-            await asyncio.sleep(40)
+            print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 60 seconds...")
+            await asyncio.sleep(60)
             
         except Exception as e:
             print(f"[MAIN][ERROR]: Loop error: {e}")
