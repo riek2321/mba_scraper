@@ -33,12 +33,18 @@ class Notifier:
             # Map category 'notifications' and semester
             url = f"{self.website_api_url}/api/sol/notifications/{notice_data['semester']}"
             
-            # Add required fields for the backend schema
+            description = notice_data.get('description')
+            if not description:
+                if notice_data['semester'] == '0':
+                    description = "Generic MBA notification or information."
+                else:
+                    description = f"MBA Notification for Semester {notice_data['semester']}"
+            
             payload = {
                 "title": notice_data['title'],
                 "link": notice_data['link'],
                 "date": notice_data['date'],
-                "description": notice_data.get('description', f"MBA Notification for Semester {notice_data['semester']}")
+                "description": description
             }
             
             headers = {
@@ -64,11 +70,18 @@ class Notifier:
         """
         try:
             url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"
+            description = notice_data.get('description')
+            if not description:
+                if str(semester) == '0':
+                    description = "Generic MBA notification or information."
+                else:
+                    description = f"MBA Notification for Semester {semester}"
+
             payload = {
                 "title": notice_data['title'],
                 "link": notice_data['link'],
                 "date": notice_data['date'],
-                "description": notice_data.get('description', f"MBA Notification for Semester {notice_data['semester']}")
+                "description": description
             }
             headers = {
                 "Content-Type": "application/json",

@@ -92,26 +92,20 @@ async def job():
                             notice['semester'] = sem
                             notifier.sync_to_website(notice)
                     else:
-                        # EXISTING: Update if link improved or needs correction
+                        # EXISTING: Update if link or description changed
                         curr_link = backend_item.get('link', '')
-                        is_generic_curr = "online-class-schedule" in curr_link or not curr_link
+                        curr_desc = backend_item.get('description', '')
                         
-                        if curr_link == "#pending" and link != "#pending":
-                            # IMPROVEMENT: Pending -> Real Link
-                            print(f"[JOB]: Updating pending link for: {title}")
+                        if curr_link != link:
+                            # LINK REFRESH: Scraper found a different URL
+                            print(f"[JOB]: Link mismatch for {title}:")
+                            print(f"       Backend: {curr_link}")
+                            print(f"       Scraper: {link}")
                             notifier.update_on_website(sem, backend_item['id'], notice)
-                        elif is_generic_curr and link == "#pending":
-                            # CORRECTION: Generic -> Pending (Coming Soon)
-                            print(f"[JOB]: Correcting generic link to #pending for: {title}")
-                            notifier.update_on_website(sem, backend_item['id'], notice)
-                        elif "teams.microsoft.com" in link and curr_link != link:
-                            # REFRESH: Updated Teams Link
-                            print(f"[JOB]: Refreshing Teams link for: {title}")
-                            notifier.update_on_website(sem, backend_item['id'], notice)
-                        elif backend_item.get('description') != notice.get('description'):
-                            # REFRESH: Updated Description
+                        elif curr_desc != notice.get('description'):
+                            # DESCRIPTION REFRESH: Corrected label or today/tomorrow
                             print(f"[JOB]: Description mismatch for Sem {sem} - {title}:")
-                            print(f"       Backend: {backend_item.get('description')}")
+                            print(f"       Backend: {curr_desc}")
                             print(f"       Scraper: {notice.get('description')}")
                             notifier.update_on_website(sem, backend_item['id'], notice)
 
@@ -235,15 +229,15 @@ async def main():
         return
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MBA Scraper Service Initializing...")
-    print(f"Interval: 2 minutes | IST-Aware Cleanup: ENABLED")
+    print(f"Interval: 10 minutes | IST-Aware Cleanup: ENABLED")
     while True:
         await job()
-        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Scan complete. Next check in 120 seconds...")
-        # Add a small heartbeat every 30 seconds during sleep so user knows it's alive
+        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Scan complete. Next check in 600 seconds...")
+        # Add heartbeats every 2.5 minutes during sleep so user knows it's alive
         for i in range(4):
-            await asyncio.sleep(30)
+            await asyncio.sleep(150)
             if i < 3: # Don't print for the last one as job starts
-                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [HEARTBEAT]: Scraper is active and waiting...")
+                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [HEARTBEAT]: Scraper is active and waiting (600s cycle)...")
 
 if __name__ == "__main__":
     asyncio.run(main())
