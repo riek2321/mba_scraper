@@ -193,6 +193,7 @@ class MBAScraper:
 
                             # Dynamic Description: Today vs Tomorrow
                             desc_prefix = "[TODAY]" if item_date_obj == current_date_ist else "[TOMORROW]"
+                            # Add IST time for extra clarity in description if needed
                             description = f"{desc_prefix} MBA Live Class: {subject_text}. Time: {time_text}."
 
                             self.notices.append({
@@ -301,13 +302,21 @@ class MBAScraper:
             print(f"[CRAWLER][ERROR]: jstree handling failed: {e}")
 
     def extract_semester_logic(self, text):
+        if not text: return "0"
         import re
+        # Standard Sem 1, Semester 1
         sem_match = re.search(r'(Sem(?:ester)?\s*([1-4]))', text, re.I)
         if sem_match: return sem_match.group(2)
-        if "First Year" in text or "Sem 1" in text: return "1"
-        if "Second Sem" in text or "Sem 2" in text: return "2"
-        if "Third Sem" in text or "Sem 3" in text: return "3"
-        if "Fourth Sem" in text or "Sem 4" in text: return "4"
+        
+        # Ordinal format: 1st SEM, 2nd SEM, 3rd SEM, 4th SEM
+        ordinal_match = re.search(r'([1-4])(?:st|nd|rd|th)?\s*SEM', text, re.I)
+        if ordinal_match: return ordinal_match.group(1)
+        
+        # Word format
+        if "First" in text or "1st" in text: return "1"
+        if "Second" in text or "2nd" in text: return "2"
+        if "Third" in text or "3rd" in text: return "3"
+        if "Fourth" in text or "4th" in text: return "4"
         return "0"
 
     def _normalize_date(self, date_str):

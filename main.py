@@ -67,7 +67,7 @@ async def job():
         print(f"[JOB]: Filtered to {len(strict_mba_notices)} strict MBA items.")
 
         # 3. SEMESTER-WISE SYNC & CLEANUP
-        for sem in ["1", "2", "3", "4"]:
+        for sem in ["1", "2", "3", "4", "0"]:
             print(f"[JOB]: Processing Semester {sem}...")
             backend_url = f"{API_URL}/api/sol/notifications/{sem}"
             try:
@@ -110,7 +110,7 @@ async def job():
                             notifier.update_on_website(sem, backend_item['id'], notice)
                         elif backend_item.get('description') != notice.get('description'):
                             # REFRESH: Updated Description
-                            print(f"[JOB]: Description mismatch for {title}:")
+                            print(f"[JOB]: Description mismatch for Sem {sem} - {title}:")
                             print(f"       Backend: {backend_item.get('description')}")
                             print(f"       Scraper: {notice.get('description')}")
                             notifier.update_on_website(sem, backend_item['id'], notice)
@@ -136,7 +136,7 @@ async def job():
         now_ist = now_utc + ist_offset
         current_date_obj = now_ist.date()
 
-        for sem in [1, 2, 3, 4]:
+        for sem in [1, 2, 3, 4, 0]:
             try:
                 notices = notifier.get_from_website(sem)
                 if not notices: continue
