@@ -191,13 +191,17 @@ class MBAScraper:
                                 print(f"[SCRAPE][SKIP OLD]: {subject_text} is from {date_str} (Yesterday/Old)")
                                 continue
 
+                            # Dynamic Description: Today vs Tomorrow
+                            desc_prefix = "[TODAY]" if item_date_obj == current_date_ist else "[TOMORROW]"
+                            description = f"{desc_prefix} MBA Live Class: {subject_text}. Time: {time_text}."
+
                             self.notices.append({
                                 "title": title.strip(),
                                 "link": final_link,
                                 "semester": semester,
                                 "date": self.parse_date(date_str),
                                 "class_time": time_text.strip(),
-                                "description": f"Live MBA Class: {subject_text}. Scheduled from {time_text} on {date_str}."
+                                "description": description
                             })
                             print(f"[CRAWLER][CLASS FOUND]: {title} (Link: {final_link})")
         except Exception as e:

@@ -110,7 +110,9 @@ async def job():
                             notifier.update_on_website(sem, backend_item['id'], notice)
                         elif backend_item.get('description') != notice.get('description'):
                             # REFRESH: Updated Description
-                            print(f"[JOB]: Updating description for: {title}")
+                            print(f"[JOB]: Description mismatch for {title}:")
+                            print(f"       Backend: {backend_item.get('description')}")
+                            print(f"       Scraper: {notice.get('description')}")
                             notifier.update_on_website(sem, backend_item['id'], notice)
 
                     # --- STEP B: CLEANUP ---
