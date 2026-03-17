@@ -174,9 +174,10 @@ async def job():
                                     except: pass
 
                         if item_date:
-                            # STRICT DATE CLEANUP: If the item is older than today, remove it
-                            if item_date < current_date_obj:
-                                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Removing older date notice: {notice_title} ({notice_date_str})")
+                            # RELAXED CLEANUP: Only remove if older than 7 days (preserve some history)
+                            cleanup_threshold = current_date_obj - datetime.timedelta(days=7)
+                            if item_date < cleanup_threshold:
+                                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Removing very old notice: {notice_title} ({notice_date_str})")
                                 notifier.delete_from_website(sem, notice_id)
                                 continue
 
@@ -229,15 +230,11 @@ async def main():
         return
 
     print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MBA Scraper Service Initializing...")
-    print(f"Interval: 10 minutes | IST-Aware Cleanup: ENABLED")
+    print(f"Interval: 2 minutes | IST-Aware Cleanup: ENABLED")
     while True:
         await job()
-        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Scan complete. Next check in 600 seconds...")
-        # Add heartbeats every 2.5 minutes during sleep so user knows it's alive
-        for i in range(4):
-            await asyncio.sleep(150)
-            if i < 3: # Don't print for the last one as job starts
-                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [HEARTBEAT]: Scraper is active and waiting (600s cycle)...")
+        print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Scan complete. Next check in 120 seconds...")
+        await asyncio.sleep(120)
 
 if __name__ == "__main__":
     asyncio.run(main())
