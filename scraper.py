@@ -11,7 +11,9 @@ class MBAScraper:
         self.keywords = ['MBA', 'Master of Business Administration']
         self.visited = set()
         self.notices = []
-        self.days_back = None
+        self.days_back = 15 # Default
+        # Golden Fingerprint from successful subagent session
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 
     async def run(self, days_back=None, targets=None):
         async with async_playwright() as p:
