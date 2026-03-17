@@ -16,37 +16,30 @@ class MBAScraper:
     async def run(self, days_back=None, targets=None):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            # Improved Stealth Headers
+            # V2 STEALTH: Minimalist headers, let Playwright handle dynamic flow
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                "Cache-Control": "max-age=0"
+                "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Cache-Control": "max-age=0",
+                "DNT": "1"
             }
             # EXTREME STEALTH: Match regional profile
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 extra_http_headers=headers,
                 viewport={'width': 1280 + random.randint(-20, 20), 'height': 800 + random.randint(-20, 20)},
-                device_scale_factor=random.choice([1, 1.25, 1.5]),
+                device_scale_factor=random.choice([1, 2]),
                 locale="en-IN",
                 timezone_id="Asia/Kolkata",
-                permissions=["geolocation"],
                 ignore_https_errors=True
             )
             page = await context.new_page()
-            # Evasive markers
+            # Advanced Evasive markers (V2)
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                window.chrome = { runtime: {} };
+                window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en-GB', 'en-US', 'en'] });
             """)
             
             self.visited = set()
@@ -130,6 +123,27 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
+        # Try direct visit first, if 403, try navigating from Home
+        if "403" in page.url or "Forbidden" in await page.title():
+            print("[CRAWLER]: Direct visit blocked (403). Attempting human-like navigation from Home...")
+            await page.goto(self.base_url, wait_until="networkidle", timeout=60000)
+            await asyncio.sleep(random.uniform(2, 5))
+            try:
+                # Target the schedule link - using flexible text matching
+                link = page.get_by_role("link", name=re.compile("Online Class Schedule", re.I))
+                if await link.count() > 0:
+                    await link.first.click()
+                    await page.wait_for_load_state("networkidle")
+                else:
+                    # Fallback for dropdowns or hidden menus
+                    await page.locator("text='Students'").hover()
+                    await asyncio.sleep(1)
+                    await page.locator("text='Online Class Schedule'").click()
+                    await page.wait_for_load_state("networkidle")
+            except Exception as e:
+                print(f"[CRAWLER][ERROR]: Human navigation failed: {e}")
+                return
+
         print("[CRAWLER]: Scrolling deeply to load all class entries (Patient Mode)...")
         await self.auto_scroll(page)
         await asyncio.sleep(5) # Extra wait for lazy content
@@ -332,7 +346,8 @@ class MBAScraper:
                         "title": text.strip(),
                         "link": href,
                         "semester": semester,
-                        "date": notice_date.strftime("%Y-%m-%d")
+                        "date": notice_date.strftime("%Y-%m-%d"),
+                        "description": f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA notification or information."
                     })
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Legacy notices parsing failed: {e}")
@@ -520,7 +535,8 @@ class MBAScraper:
                     "title": text.strip(),
                     "link": href,
                     "semester": semester,
-                    "date": notice_date.strftime("%Y-%m-%d")
+                    "date": notice_date.strftime("%Y-%m-%d"),
+                    "description": f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA notification or information."
                 })
             except:
                 continue
