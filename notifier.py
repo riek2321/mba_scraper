@@ -1,4 +1,7 @@
-import requests
+try:
+    import requests # type: ignore
+except ImportError:
+    pass
 import json
 
 class Notifier:
@@ -72,5 +75,9 @@ class Notifier:
         url = f"{self.website_api_url}/api/sol/notifications/{semester}"
         resp = self._request_with_retry("GET", url)
         if resp and resp.status_code == 200:
-            return resp.json().get('data', [])
+            try:
+                data = resp.json().get('data')
+                return data if isinstance(data, list) else []
+            except Exception:
+                return []
         return []

@@ -33,7 +33,7 @@ class MBAScraper:
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         self.targets = [
             "https://sol.du.ac.in/home.php",
-            "https://web.sol.du.ac.in/info/online-class-schedule",
+            "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct URL V15.0
             "https://sol.du.ac.in/all-notices.php"
         ]
 
@@ -59,14 +59,14 @@ class MBAScraper:
             )
             page = await context.new_page()
 
-            # v14.1: SESSION PRIMER
+            # v15.0: SESSION PRIMER (Establishing cookies on 'web' subdomain)
             print("[CRAWLER]: Priming Subdomain Session (web.sol.du.ac.in)")
             try:
                 await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
                 await asyncio.sleep(5)
             except Exception: pass
 
-            # v14.1: REQUEST INTERCEPTION
+            # v15.0: REQUEST INTERCEPTION (Bypass 403)
             async def intercept_vcs(route):
                 h = {**route.request.headers}
                 h["Referer"] = "https://web.sol.du.ac.in/info/online-class-schedule"
@@ -81,24 +81,11 @@ class MBAScraper:
                 try:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
-                    if "online-class-schedule" in url:
-                        try:
-                            print("[CRAWLER]: Attempting HUMAN CLICK transition from Home Page")
-                            await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded")
-                            
-                            async with context.expect_page() as new_page_info:
-                                await page.locator('a.btn-custom-blue[href*="online-class-schedule"]').first.click()
-                            
-                            target_page = await new_page_info.value
-                            print("[CRAWLER]: Click transition successful to NEW TAB.")
-                            
-                            await target_page.wait_for_load_state("domcontentloaded")
-                            await self.extract_online_classes(target_page)
-                            await target_page.close()
-                        except Exception as e:
-                            print(f"[CRAWLER][WARNING]: Click transition failed ({e}). Visiting directly.")
-                            await page.goto(url, wait_until="domcontentloaded", timeout=90000)
-                            await self.extract_online_classes(page)
+                    if "vcs.php" in url or "online-class-schedule" in url:
+                        # V15.0: Direct Extraction prioritized
+                        await page.goto(url, wait_until="load", timeout=90000, 
+                                       referer="https://web.sol.du.ac.in/info/online-class-schedule")
+                        await self.extract_online_classes(page)
                     else:
                         await page.goto(url, wait_until="domcontentloaded", timeout=90000)
                         await asyncio.sleep(random.uniform(2, 5))
@@ -117,181 +104,125 @@ class MBAScraper:
             await self.process_and_sync()
 
     async def extract_online_classes(self, page):
-        """Specifically parse the online class schedule table"""
-        print(f"[CRAWLER]: Initializing Physical Load on {page.url}")
+        """Specifically parse the online class schedule table (Direct/V15.0)"""
+        print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
         try:
+            # 1. Wait for Table with timeout
+            try:
+                await page.wait_for_selector("table", timeout=20000)
+            except Exception:
+                print("[CRAWLER][WARNING]: Table not found immediately. Triggering interaction...")
+
+            # 2. Human-Like Keyboard Scrolling to trigger lazy load
             await page.mouse.move(random.randint(200, 400), random.randint(200, 400))
             for _ in range(3):
                 await page.keyboard.press("PageDown")
                 await asyncio.sleep(1)
-            await self.auto_scroll(page) 
-            await asyncio.sleep(10) 
+            await asyncio.sleep(5) 
         except Exception as e:
             print(f"[CRAWLER][WARNING]: Interaction trigger failed: {e}")
 
         all_raw_tables = []
         try:
-            print(f"[CRAWLER]: Scanning {len(page.frames)} frames for schedule table")
-            for i, frame in enumerate(page.frames):
+            # V15.0: Extract from current page AND any frames
+            contexts_to_scan = [page] + page.frames
+            print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
+            
+            for ctx in contexts_to_scan:
                 try:
-                    frame_url = frame.url
-                    if "vcs.php" in frame_url or "team_schedules" in frame_url:
-                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})")
-                        f_content = await frame.content()
-                        print(f"[CRAWLER][DEBUG]: Frame Content Snippet: {f_content[:200]}")
-                        
-                        tables_data = await frame.evaluate("""() => {
-                            const tables = Array.from(document.querySelectorAll('table'));
-                            if (tables.length === 0) return null;
-                            return tables.map(table => {
-                                return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                    Array.from(tr.querySelectorAll('td')).map(td => {
-                                        const a = td.querySelector('a');
-                                        return { text: td.innerText.trim(), href: a ? a.href : null };
-                                    })
-                                );
-                            });
-                        }""")
-                        if isinstance(tables_data, list):
-                            print(f"[CRAWLER]: Success! Found {len(tables_data)} tables in Frame {i}")
-                            for t in tables_data: # type: ignore
-                                all_raw_tables.append(t)
+                    tables_data = await ctx.evaluate("""() => {
+                        const tables = Array.from(document.querySelectorAll('table'));
+                        if (tables.length === 0) return null;
+                        return tables.map(table => {
+                            return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                Array.from(tr.querySelectorAll('td')).map(td => {
+                                    const a = td.querySelector('a');
+                                    return { text: td.innerText.trim(), href: a ? a.href : null };
+                                })
+                            );
+                        });
+                    }""")
+                    if isinstance(tables_data, list):
+                        for t in tables_data: # type: ignore
+                            all_raw_tables.append(t)
                 except Exception: continue
-
-            # MANUAL IFRAME INJECTION Fallback
-            if not all_raw_tables:
-                print("[CRAWLER]: Frames missing. Attempting MANUAL IFRAME INJECTION...")
-                await page.evaluate("""() => {
-                    if (!document.querySelector('iframe[src*="vcs.php"]')) {
-                        const ifrm = document.createElement('iframe');
-                        ifrm.src = 'https://web.sol.du.ac.in/my/team_schedules/vcs.php';
-                        ifrm.id = 'manual_schedule_frame';
-                        ifrm.style.width = '100%';
-                        ifrm.style.height = '1000px';
-                        document.body.appendChild(ifrm);
-                    }
-                }""")
-                await asyncio.sleep(10) 
-                
-                for frame in page.frames:
-                    if "vcs.php" in frame.url:
-                        try:
-                            it_tables = await frame.evaluate("""() => {
-                                const tables = Array.from(document.querySelectorAll('table'));
-                                return tables.map(table => {
-                                    return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                        Array.from(tr.querySelectorAll('td')).map(td => {
-                                            const a = td.querySelector('a');
-                                            return { text: td.innerText.trim(), href: a ? a.href : null };
-                                        })
-                                    );
-                                });
-                            }""")
-                            if isinstance(it_tables, list):
-                                for t in it_tables:
-                                    all_raw_tables.append(t)
-                        except Exception: pass
-
-            # ISOLATED ACCESS Fallback
-            if not all_raw_tables:
-                print("[CRAWLER]: Injection failed or empty. Trying ISOLATED ACCESS fallback")
-                vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
-                try:
-                    await page.goto(vcs_url, wait_until="load", timeout=90000, 
-                                   referer="https://web.sol.du.ac.in/info/online-class-schedule")
-                    await asyncio.sleep(15) 
-                    page_len = len(await page.content())
-                    if page_len > 500:
-                        direct_tables = await page.evaluate("""() => {
-                            return Array.from(document.querySelectorAll('table')).map(table => {
-                                return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                    Array.from(tr.querySelectorAll('td')).map(td => {
-                                        const a = td.querySelector('a');
-                                        return { text: td.innerText.trim(), href: a ? a.href : null };
-                                    })
-                                );
-                            });
-                        }""")
-                        if isinstance(direct_tables, list):
-                            for t in direct_tables:
-                                all_raw_tables.append(t)
-                except Exception: pass
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
             
-            for rows in all_raw_tables: # type: ignore
-                date_str = None
-                for row in rows: # type: ignore
-                    combined_text = " ".join([c['text'] for c in row]) # type: ignore
-                    if 'date:' in combined_text.lower():
-                        date_str = combined_text.split(':')[1].strip()
-                        break
-                
-                if not date_str: continue
-                
-                for cells in rows: # type: ignore
-                    if len(cells) < 4: continue # type: ignore
-                    row_text = " ".join([c['text'] for c in cells]) # type: ignore
-                    if not any(kw.lower() in row_text.lower() for kw in self.keywords):
-                        continue
-                        
-                    course_text = cells[0]['text'] # type: ignore
-                    sem_text = cells[1]['text'] # type: ignore
-                    subject_text = cells[2]['text'] # type: ignore
-                    
-                    time_text = ""
-                    for c in cells: # type: ignore
-                        if re.search(r'\d{1,2}:\d{2}', c['text']):
-                            time_text = c['text']
+            if isinstance(all_raw_tables, list):
+                for rows in all_raw_tables: # type: ignore
+                    date_str = None
+                    for row in rows: # type: ignore
+                        combined_text = " ".join([c['text'] for c in row]) # type: ignore
+                        if 'date:' in combined_text.lower():
+                            date_str = combined_text.split(':')[1].strip()
                             break
                     
-                    href = None
-                    link_data = None
-                    for c in reversed(cells): # type: ignore
-                        if c['href'] and ('teams.microsoft.com' in c['href'] or 'join' in c['text'].lower()): # type: ignore
-                            href = c['href']
-                            link_data = c
-                            break
+                    if not date_str: continue
+                    
+                    for cells in rows: # type: ignore
+                        if len(cells) < 4: continue # type: ignore
+                        row_text = " ".join([c['text'] for c in cells]) # type: ignore
+                        if not any(kw.lower() in row_text.lower() for kw in self.keywords):
+                            continue
+                            
+                        course_text = cells[0]['text'] # type: ignore
+                        sem_text = cells[1]['text'] # type: ignore
+                        subject_text = cells[2]['text'] # type: ignore
                         
-                    is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
-                    if is_mba_course:
-                        semester = self.extract_semester_logic(sem_text if sem_text else course_text)
-                        if semester == "0": semester = self.extract_semester_logic(course_text)
+                        time_text = ""
+                        for c in cells: # type: ignore
+                            if re.search(r'\d{1,2}:\d{2}', c['text']):
+                                time_text = c['text']
+                                break
                         
-                        title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
-                        link_text = link_data.get('text', '').strip() if link_data else "" # type: ignore
-                        final_link = href
-                        is_teams_link = href and "teams.microsoft.com" in href # type: ignore
-                        
-                        is_pending = (
-                            not href or 
-                            ("online-class-schedule" in href and not is_teams_link) or # type: ignore
-                            "..." in href or # type: ignore
-                            "login" in link_text.lower() or 
-                            "available soon" in link_text.lower()
-                        )
-                        
-                        if is_pending:
-                            final_link = "#pending"
-                        
-                        now_utc = datetime.datetime.utcnow()
-                        ist_offset = datetime.timedelta(hours=5, minutes=30)
-                        current_date_ist = (now_utc + ist_offset).date()
-                        item_date_obj = self._normalize_date(str(date_str))
-                        
-                        if item_date_obj and item_date_obj < current_date_ist: continue
+                        href = None
+                        link_data = None
+                        for c in reversed(cells): # type: ignore
+                            if c['href'] and ('teams.microsoft.com' in c['href'] or 'join' in c['text'].lower()): # type: ignore
+                                href = c['href']
+                                link_data = c
+                                break
+                            
+                        is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
+                        if is_mba_course:
+                            semester = self.extract_semester_logic(sem_text if sem_text else course_text)
+                            if semester == "0": semester = self.extract_semester_logic(course_text)
+                            
+                            title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
+                            link_text = link_data.get('text', '').strip() if link_data else "" # type: ignore
+                            final_link = href
+                            is_teams_link = href and "teams.microsoft.com" in href # type: ignore
+                            
+                            is_pending = (
+                                not href or 
+                                ("online-class-schedule" in href and not is_teams_link) or # type: ignore
+                                "..." in href or # type: ignore
+                                "login" in link_text.lower() or 
+                                "available soon" in link_text.lower()
+                            )
+                            
+                            if is_pending:
+                                final_link = "#pending"
+                            
+                            now_utc = datetime.datetime.utcnow()
+                            ist_offset = datetime.timedelta(hours=5, minutes=30)
+                            current_date_ist = (now_utc + ist_offset).date()
+                            item_date_obj = self._normalize_date(str(date_str))
+                            
+                            if item_date_obj and item_date_obj < current_date_ist: continue
 
-                        description = f"MBA Live Class: {subject_text}. Time: {time_text}."
+                            description = f"MBA Live Class: {subject_text}. Time: {time_text}."
 
-                        self.notices.append({
-                            "title": title.strip(),
-                            "link": final_link,
-                            "semester": semester,
-                            "date": self.parse_date(str(date_str)),
-                            "class_time": time_text.strip(),
-                            "description": description
-                        })
-                        print(f"[CRAWLER][CLASS FOUND]: {title}")
+                            self.notices.append({
+                                "title": title.strip(),
+                                "link": final_link,
+                                "semester": semester,
+                                "date": self.parse_date(str(date_str)),
+                                "class_time": time_text.strip(),
+                                "description": description
+                            })
+                            print(f"[CRAWLER][CLASS FOUND]: {title}")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Online classes parsing failed: {e}")
 
@@ -442,14 +373,25 @@ class MBAScraper:
                 
                 print(f"[JOB]: Processing Semester {sem}...")
                 existing = notifier.get_from_website(sem) # type: ignore
-                existing_links = [e['link'] for e in existing] if existing else [] # type: ignore
                 
-                for item in sem_items:
-                    link = item.get('link')
-                    title = item.get('title', 'Unknown Notice')
-                    if link and link not in existing_links: # type: ignore
-                        print(f"[JOB]: New item found, syncing to backend: {str(title)[:50]}") # type: ignore
-                        notifier.sync_to_website(item) # type: ignore
+                # V15.0: Harden existing_links extraction
+                if isinstance(existing, list):
+                    existing_links = []
+                    for e in existing:
+                        if isinstance(e, dict) and e.get('link'):
+                            existing_links.append(e.get('link'))
+                    
+                    for item in sem_items:
+                        link = item.get('link')
+                        title = item.get('title', 'Unknown Notice')
+                        if link and link not in existing_links: # type: ignore
+                            print(f"[JOB]: New item found, syncing to backend: {str(title)[:50]}") # type: ignore
+                            success = notifier.sync_to_website(item) # type: ignore
+                            if not success:
+                                print(f"[JOB][WARNING]: Sync failed for {str(title)[:30]}. Check SCRAPER_KEY.") # type: ignore
+                else:
+                    print(f"[JOB][ERROR]: Backend returned invalid data for Sem {sem}. Skipping sync.")
+
         except Exception as e:
             print(f"[JOB][ERROR]: Sync failed: {e}")
 
