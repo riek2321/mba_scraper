@@ -102,6 +102,7 @@ class MBAScraper:
             await browser.close()
             print(f"[JOB]: Scan found {len(self.notices)} possible MBA items.")
             await self.process_and_sync()
+            return self.notices # v16.0: Fix NoneType error in main.py
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table (Direct/V15.0)"""
@@ -130,6 +131,10 @@ class MBAScraper:
             
             for ctx in contexts_to_scan:
                 try:
+                    # v16.0: Frame-level wait
+                    try: await ctx.wait_for_selector("table", timeout=5000)
+                    except: pass
+                    
                     tables_data = await ctx.evaluate("""() => {
                         const tables = Array.from(document.querySelectorAll('table'));
                         if (tables.length === 0) return null;
@@ -149,6 +154,14 @@ class MBAScraper:
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
             
+            # v16.0: HTML Diagnostics if 0 tables
+            if not all_raw_tables:
+                print("[CRAWLER][DIAGNOSTIC]: No tables found. Source snippet:")
+                try:
+                    html = await page.content()
+                    print(html[:500].replace('\n', ' '))
+                except: pass
+
             if isinstance(all_raw_tables, list):
                 for rows in all_raw_tables: # type: ignore
                     date_str = None

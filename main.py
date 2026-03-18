@@ -3,15 +3,21 @@ import time
 import os
 import sqlite3
 import datetime
-import requests
+try:
+    import requests # type: ignore
+except ImportError:
+    pass
 import sys
 import re
 import random
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-from scraper import MBAScraper
-from database import ScraperDatabase
-from notifier import Notifier
+try:
+    from scraper import MBAScraper # type: ignore
+    from database import ScraperDatabase # type: ignore
+    from notifier import Notifier # type: ignore
+except ImportError:
+    pass
 
 # Tiny Health Check Server for Render
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -32,8 +38,9 @@ async def job(targets=None):
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Scraper Job (Targeted: {targets is not None})...")
     
     # Configuration via environment variables
-    API_URL = os.environ.get("BACKEND_API_URL", "https://solmates-backend.onrender.com")
-    API_KEY = os.environ.get("SCRAPER_API_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
+    # v16.0: UNIFIED CONFIGURATION
+    API_URL = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
+    API_KEY = os.environ.get("SCRAPER_KEY", "7072")
     
     scraper = MBAScraper()
     db = ScraperDatabase()
@@ -47,8 +54,8 @@ async def job(targets=None):
         is_empty = cursor.fetchone()[0] == 0
 
     try:
-        # Pre-Check for Online Class Schedule (Watchdog)
-        CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
+        # Pre-Check for Online Class Schedule (Watchdog) - Unified V15/16 Direct URL
+        CLASS_URL = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
         
         # Only probe if classes are in our targets (or if targets is None for full scan)
         if targets is None or CLASS_URL in targets:
@@ -81,7 +88,9 @@ async def job(targets=None):
 
         # 1. RUN TARGETED OR EXHAUSTIVE SCRAPE
         found_notices = await scraper.run(days_back=15, targets=targets)
-        print(f"[JOB]: Scan found {len(found_notices)} possible MBA items.")
+        # v16.0: None guard for return value
+        found_notices = found_notices if found_notices is not None else []
+        print(f"[JOB]: Scan found {len(found_notices)} possible MBA items.") # type: ignore
         
         # 2. TRACK CURRENT ITEMS (For presence check)
         current_item_titles = set()
@@ -89,12 +98,12 @@ async def job(targets=None):
         current_items_on_site = set() # (title, link) tuples
         strict_mba_notices = []
 
-        for n in found_notices:
+        for n in found_notices: # type: ignore
             # Strict Filter (Double Check)
-            if "MBA" in n['title'].upper() or "MBA" in n.get('description', '').upper():
-                current_item_titles.add(n['title'])
-                current_item_links.add(n['link'])
-                current_items_on_site.add((n['title'], n['link']))
+            if "MBA" in n['title'].upper() or "MBA" in n.get('description', '').upper(): # type: ignore
+                current_item_titles.add(n['title']) # type: ignore
+                current_item_links.add(n['link']) # type: ignore
+                current_items_on_site.add((n['title'], n['link'])) # type: ignore
                 strict_mba_notices.append(n)
         
         print(f"[JOB]: Filtered to {len(strict_mba_notices)} strict MBA items.")
@@ -124,8 +133,8 @@ async def job(targets=None):
                         # We only sync if it's NOT in our DB.
                         if db.save_link(link, title, sem):
                             print(f"[JOB]: New item found, syncing to backend: {title}")
-                            notice['semester'] = sem
-                            notifier.sync_to_website(notice)
+                            notice['semester'] = sem # type: ignore
+                            notifier.sync_to_website(notice) # type: ignore
                         else:
                             # Already in DB but missing from backend = Already processed + Deleted by admin.
                             # We respect the deletion and DON'T re-sync.
@@ -140,13 +149,13 @@ async def job(targets=None):
                             print(f"[JOB]: Link mismatch for {title}:")
                             print(f"       Backend: {curr_link}")
                             print(f"       Scraper: {link}")
-                            notifier.update_on_website(sem, backend_item['id'], notice)
-                        elif curr_desc != notice.get('description'):
+                            notifier.update_on_website(sem, backend_item['id'], notice) # type: ignore
+                        elif curr_desc != notice.get('description'): # type: ignore
                             # DESCRIPTION REFRESH: Corrected label or today/tomorrow
                             print(f"[JOB]: Description mismatch for Sem {sem} - {title}:")
                             print(f"       Backend: {curr_desc}")
-                            print(f"       Scraper: {notice.get('description')}")
-                            notifier.update_on_website(sem, backend_item['id'], notice)
+                            print(f"       Scraper: {notice.get('description')}") # type: ignore
+                            notifier.update_on_website(sem, backend_item['id'], notice) # type: ignore
 
                     # --- STEP B: CLEANUP ---
                     for item in backend_items:
@@ -293,12 +302,12 @@ async def main():
     print(f"Mode: PATIENT Watchdog | Pulse: 300s | Full Scan: 900s")
     
     pulse_index = 0
-    CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
+    CLASS_URL = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
     
     while True:
         try:
             # Every 3rd pulse (0, 3, 6...) run a FULL SCAN (900 seconds)
-            if pulse_index % 3 == 0:
+            if pulse_index % 3 == 0: # type: ignore
                 print(f"\n[PULSE {pulse_index}]: Triggering FULL SCAN...")
                 await job(targets=None) 
             else:
@@ -306,7 +315,7 @@ async def main():
                 print(f"\n[PULSE {pulse_index}]: Triggering TARGETED CLASS SCAN...")
                 await job(targets=[CLASS_URL])
             
-            pulse_index += 1
+            pulse_index += 1 # type: ignore
             print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 300 seconds...")
             await asyncio.sleep(300)
             
