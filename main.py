@@ -80,7 +80,7 @@ async def job(targets=None):
                 print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Attempting deep scrape anyway.")
 
         # 1. RUN TARGETED OR EXHAUSTIVE SCRAPE
-        found_notices = await scraper.run(days_back=7, targets=targets)
+        found_notices = await scraper.run(days_back=15, targets=targets)
         print(f"[JOB]: Scan found {len(found_notices)} possible MBA items.")
         
         # 2. TRACK CURRENT ITEMS (For presence check)
@@ -151,12 +151,16 @@ async def job(targets=None):
                     # --- STEP B: CLEANUP ---
                     for item in backend_items:
                         title = item.get('title', '')
-                        link = item.get('link', '')
+                        desc = item.get('description', '')
                         item_id = item.get('id', '')
                         item_date_str = item.get('date', '') # YYYY-MM-DD
                         
-                        pass
+                        is_live_class = "MBA Live Class" in desc or ("[" in title and "] MBA Sem" in title)
                         
+                        if is_live_class and title not in current_item_titles:
+                            # The live class is no longer on the DU class schedule (or has passed).
+                            print(f"[JOB][CLEANUP]: Live Class finished/removed. Deleting: {title}")
+                            notifier.delete_from_website(sem, item_id)
             except Exception as e:
                 print(f"[JOB][ERROR]: Failed processing sem {sem}: {e}")
         
@@ -213,8 +217,8 @@ async def job(targets=None):
                                     except: pass
 
                         if item_date:
-                            # RELAXED CLEANUP: Only remove if older than 7 days (preserve some history)
-                            cleanup_threshold = current_date_obj - datetime.timedelta(days=7)
+                            # RELAXED CLEANUP: Only remove if older than 15 days (preserve some history)
+                            cleanup_threshold = current_date_obj - datetime.timedelta(days=15)
                             if item_date < cleanup_threshold:
                                 print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Removing very old notice: {notice_title} ({notice_date_str})")
                                 notifier.delete_from_website(sem, notice_id)

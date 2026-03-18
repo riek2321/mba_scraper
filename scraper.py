@@ -316,13 +316,19 @@ class MBAScraper:
                         # Parse item date robustly
                         item_date_obj = self._normalize_date(date_str)
                         
-                        # HARD FILTER: Don't scrape anything older than today
+                        # HARD FILTER: Strict lifecycle management (Only Today and Future)
                         if item_date_obj and item_date_obj < current_date_ist:
-                            print(f"[SCRAPE][SKIP OLD]: {subject_text} is from {date_str} (Yesterday/Old)")
+                            print(f"[SCRAPE][SKIP OLD]: {subject_text} is from {date_str} (Past class)")
                             continue
 
-                        # Dynamic Description: Today vs Tomorrow
-                        desc_prefix = "[TODAY]" if item_date_obj == current_date_ist else "[TOMORROW]"
+                        # Dynamic Description: Today, Tomorrow, or Specific Date
+                        if item_date_obj == current_date_ist:
+                            desc_prefix = "[TODAY]"
+                        elif item_date_obj == current_date_ist + datetime.timedelta(days=1):
+                            desc_prefix = "[TOMORROW]"
+                        else:
+                            # e.g., "[20 Mar]"
+                            desc_prefix = f"[{item_date_obj.strftime('%d %b')}]"
                         # Add IST time for extra clarity in description if needed
                         description = f"{desc_prefix} MBA Live Class: {subject_text}. Time: {time_text}."
 
