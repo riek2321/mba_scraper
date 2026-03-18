@@ -60,7 +60,25 @@ class MBAScraper:
                 for url in self.targets:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}...")
                     try:
-                        await page.goto(url, wait_until="load", timeout=90000)
+                        # V9.0: HUMAN CLICK-THROUGH FOR SCHEDULE
+                        if "online-class-schedule" in url:
+                            print("[CRAWLER]: Attempting HUMAN CLICK transition from Home Page...")
+                            # 1. Ensure we are on Home first (Self-healing)
+                            if "home.php" not in page.url:
+                                await page.goto("https://sol.du.ac.in/home.php", wait_until="load", timeout=60000)
+                            
+                            # 2. Find and click the button
+                            btn = page.locator('a.btn-custom-blue[href*="online-class-schedule"]').first
+                            if await btn.count() > 0:
+                                await btn.click()
+                                await page.wait_for_load_state("load", timeout=60000)
+                                print("[CRAWLER]: Click transition successful.")
+                            else:
+                                print("[CRAWLER][WARNING]: Button not found, falling back to direct visit.")
+                                await page.goto(url, wait_until="load", timeout=90000)
+                        else:
+                            await page.goto(url, wait_until="load", timeout=90000)
+                        
                         await asyncio.sleep(random.uniform(5, 8))
                         
                         if "online-class-schedule" in url:
@@ -214,19 +232,20 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V8.4: ROBUST EXTRACTION
+        # V8.5: ULTRA-ROBUST EXTRACTION
         print(f"[CRAWLER]: Waiting for content in {len(page.frames)} frames...")
-        await asyncio.sleep(10) # Heavy stabilization for Render
+        await asyncio.sleep(12) # Max stabilization for Render
         await self.auto_scroll(page)
         
         all_raw_tables = []
         try:
-            # 1. First Pass: Scan ALL Frames
+            # 1. First Pass: Scan ALL Frames (Active Frame Search)
             for i, frame in enumerate(page.frames):
                 try:
                     frame_url = frame.url
+                    # Look for vcs.php anywhere in the frame stack
                     if "vcs.php" in frame_url or i > 0:
-                        print(f"[CRAWLER][DEBUG]: Checking Frame {i} ({frame_url})...")
+                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
                         tables_data = await frame.evaluate("""() => {
                             const tables = Array.from(document.querySelectorAll('table'));
                             if (tables.length === 0) return null;
@@ -240,23 +259,25 @@ class MBAScraper:
                             });
                         }""")
                         if tables_data:
-                            print(f"[CRAWLER]: Found {len(tables_data)} tables in Frame {i}.")
+                            print(f"[CRAWLER]: Success! Found {len(tables_data)} tables in Frame {i}.")
                             all_raw_tables.extend(tables_data)
                 except: continue
 
             # 2. Second Pass: If still no tables, try ISOLATED DIRECT ACCESS with Referer
             if not all_raw_tables:
-                print("[CRAWLER]: Parent page failed to reveal tables. Attempting ISOLATED ACCESS...")
+                print("[CRAWLER]: Parent frames failed. Attempting ISOLATED ACCESS to vcs.php...")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
-                    # Referer is CRITICAL for these internal PHP scripts
+                    # Clearer Referer and heavier Wait
                     await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
-                    await asyncio.sleep(10) # Let it render
+                    await asyncio.sleep(15) # Extreme patience for slow Render boots
                     
-                    # Log content for debugging Render failures
                     page_len = len(await page.content())
                     print(f"[CRAWLER][DEBUG]: Isolated vcs.php loaded ({page_len} bytes).")
+                    
+                    if page_len < 500:
+                        print(f"[CRAWLER][WARNING]: Isolated page content too small. Likely blocked.")
                     
                     direct_tables = await page.evaluate("""() => {
                         const tables = Array.from(document.querySelectorAll('table'));
@@ -272,8 +293,6 @@ class MBAScraper:
                     if direct_tables:
                         print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
                         all_raw_tables.extend(direct_tables)
-                    else:
-                        print("[CRAWLER][WARNING]: Isolated access loaded but NO tables found.")
                 except Exception as direct_e:
                     print(f"[CRAWLER][ERROR]: Isolated access failed: {direct_e}")
 
