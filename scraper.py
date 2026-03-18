@@ -60,34 +60,40 @@ class MBAScraper:
                 for url in self.targets:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}...")
                     try:
-                        # V9.0: HUMAN CLICK-THROUGH FOR SCHEDULE
+                        # V10.0: NEW TAB HANDLING FOR SCHEDULE
                         if "online-class-schedule" in url:
                             print("[CRAWLER]: Attempting HUMAN CLICK transition from Home Page...")
-                            # 1. Ensure we are on Home first (Self-healing)
                             if "home.php" not in page.url:
                                 await page.goto("https://sol.du.ac.in/home.php", wait_until="load", timeout=60000)
                             
-                            # 2. Find and click the button
                             btn = page.locator('a.btn-custom-blue[href*="online-class-schedule"]').first
                             if await btn.count() > 0:
-                                await btn.click()
-                                await page.wait_for_load_state("load", timeout=60000)
-                                print("[CRAWLER]: Click transition successful.")
+                                try:
+                                    # Handle target="_blank" new tab
+                                    async with context.expect_page() as new_page_info:
+                                        await btn.click()
+                                    target_page = await new_page_info.value
+                                    await target_page.wait_for_load_state("load", timeout=60000)
+                                    print("[CRAWLER]: Click transition successful to NEW TAB.")
+                                    await self.extract_online_classes(target_page)
+                                    await target_page.close()
+                                except Exception as click_e:
+                                    print(f"[CRAWLER][WARNING]: New tab capture failed: {click_e}. Trying direct visit.")
+                                    await page.goto(url, wait_until="load", timeout=90000)
+                                    await self.extract_online_classes(page)
                             else:
                                 print("[CRAWLER][WARNING]: Button not found, falling back to direct visit.")
                                 await page.goto(url, wait_until="load", timeout=90000)
+                                await self.extract_online_classes(page)
                         else:
                             await page.goto(url, wait_until="load", timeout=90000)
-                        
-                        await asyncio.sleep(random.uniform(5, 8))
-                        
-                        if "online-class-schedule" in url:
-                            await self.extract_online_classes(page)
-                        elif "all-notices" in url or "home" in url:
-                            await self.extract_legacy_notices(page)
-                        
-                        await self.expand_content(page)
-                        await self.extract_mba_content(page)
+                            await asyncio.sleep(random.uniform(5, 8))
+                            
+                            if "all-notices" in url or "home" in url:
+                                await self.extract_legacy_notices(page)
+                            
+                            await self.expand_content(page)
+                            await self.extract_mba_content(page)
                     except Exception as visit_e:
                         print(f"[CRAWLER][ERROR]: Failed to visit {url}: {visit_e}")
             except Exception as e:
@@ -232,9 +238,9 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V8.5: ULTRA-ROBUST EXTRACTION
-        print(f"[CRAWLER]: Waiting for content in {len(page.frames)} frames...")
-        await asyncio.sleep(12) # Max stabilization for Render
+        # V8.6: TARGETED FRAME SCAN (New Tab Aware)
+        print(f"[CRAWLER]: Scanning {len(page.frames)} frames on {page.url}...")
+        await asyncio.sleep(15) # Max stabilization for Render
         await self.auto_scroll(page)
         
         all_raw_tables = []
@@ -243,9 +249,9 @@ class MBAScraper:
             for i, frame in enumerate(page.frames):
                 try:
                     frame_url = frame.url
-                    # Look for vcs.php anywhere in the frame stack
-                    if "vcs.php" in frame_url or i > 0:
-                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
+                    print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
+                    # Target both exact vcs.php and any internal frames
+                    if "vcs.php" in frame_url or "team_schedules" in frame_url:
                         tables_data = await frame.evaluate("""() => {
                             const tables = Array.from(document.querySelectorAll('table'));
                             if (tables.length === 0) return null;
@@ -265,34 +271,33 @@ class MBAScraper:
 
             # 2. Second Pass: If still no tables, try ISOLATED DIRECT ACCESS with Referer
             if not all_raw_tables:
-                print("[CRAWLER]: Parent frames failed. Attempting ISOLATED ACCESS to vcs.php...")
+                print("[CRAWLER]: Parent frames failed. Attempting ISOLATED ACCESS fallback...")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
-                    # Clearer Referer and heavier Wait
+                    # Referer is CRITICAL
                     await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
-                    await asyncio.sleep(15) # Extreme patience for slow Render boots
+                    await asyncio.sleep(15) 
                     
                     page_len = len(await page.content())
-                    print(f"[CRAWLER][DEBUG]: Isolated vcs.php loaded ({page_len} bytes).")
+                    print(f"[CRAWLER][DEBUG]: Isolated visit result: {page_len} bytes.")
                     
-                    if page_len < 500:
-                        print(f"[CRAWLER][WARNING]: Isolated page content too small. Likely blocked.")
-                    
-                    direct_tables = await page.evaluate("""() => {
-                        const tables = Array.from(document.querySelectorAll('table'));
-                        return tables.map(table => {
-                            return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                Array.from(tr.querySelectorAll('td')).map(td => {
-                                    const a = td.querySelector('a');
-                                    return { text: td.innerText.trim(), href: a ? a.href : null };
-                                })
-                            );
-                        });
-                    }""")
-                    if direct_tables:
-                        print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
-                        all_raw_tables.extend(direct_tables)
+                    if page_len > 500: # Actually has content
+                        direct_tables = await page.evaluate("""() => {
+                            return Array.from(document.querySelectorAll('table')).map(table => {
+                                return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                    Array.from(tr.querySelectorAll('td')).map(td => {
+                                        const a = td.querySelector('a');
+                                        return { text: td.innerText.trim(), href: a ? a.href : null };
+                                    })
+                                );
+                            });
+                        }""")
+                        if direct_tables:
+                            print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
+                            all_raw_tables.extend(direct_tables)
+                    else:
+                        print(f"[CRAWLER][WARNING]: Isolated page too small ({page_len}b). Blocked.")
                 except Exception as direct_e:
                     print(f"[CRAWLER][ERROR]: Isolated access failed: {direct_e}")
 
