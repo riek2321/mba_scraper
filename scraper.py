@@ -53,14 +53,11 @@ class MBAScraper:
             self.notices = []
             self.days_back = days_back if days_back is not None else self.days_back
             
-            # Key targets for deep scan - PRIORITIZED Online Class Schedule
+            # Key targets for deep scan - STRICTLY AS REQUESTED
             all_targets = [
+                "https://sol.du.ac.in/home.php",
                 "https://web.sol.du.ac.in/info/online-class-schedule",
-                self.base_url,
-                "https://web.sol.du.ac.in/info/archive-notices-information",
-                "https://web.sol.du.ac.in/student-academic-information",
-                "https://sol.du.ac.in/all-notices.php",
-                "https://sol.du.ac.in/home.php"
+                "https://sol.du.ac.in/all-notices.php"
             ]
             
             start_urls = targets if targets else all_targets
@@ -69,7 +66,8 @@ class MBAScraper:
             for url in start_urls:
                 # Patient waiting to seem more human and allow server response
                 await asyncio.sleep(random.uniform(3.0, 6.0))
-                await self.crawl(page, url, depth=0, max_depth=1) 
+                # Strict 0 depth - do not follow any links deep
+                await self.crawl(page, url, depth=0, max_depth=0) 
             
             await browser.close()
             return self.notices
@@ -441,32 +439,26 @@ class MBAScraper:
     def extract_semester_logic(self, text):
         if not text: return "0"
         
-        # 1. Roman Numerals: IV, III, II, I (Strict word boundary)
-        # We check IV first so it doesn't match I partially
-        roman_map = {"IV": "4", "III": "3", "II": "2", "I": "1"}
-        for rom, num in roman_map.items():
-            if re.search(rf'\b{rom}\b', text, re.I):
-                return num
-
-        # 2. Standard Sem 1, Semester 1
-        sem_match = re.search(r'(Sem(?:ester)?\s*([1-4]))', text, re.I)
-        if sem_match: return sem_match.group(2)
+        # 1. Standard "Sem 1", "Semester - II", "Sem IV", "Sem: 3"
+        # STRICT REQUIREMENT: Number/Roman MUST be directly adjacent to 'Sem' or 'Semester'
+        sem_match = re.search(r'\bSem(?:ester)?\s*[-: ]*\s*([1-4]|I{1,3}|IV)\b', text, re.I)
+        if sem_match: 
+            val = sem_match.group(1).upper()
+            if val == 'I': return '1'
+            if val == 'II': return '2'
+            if val == 'III': return '3'
+            if val == 'IV': return '4'
+            return val
         
-        # 3. Ordinal format: 1st SEM, 2nd SEM, 3rd SEM, 4th SEM
-        ordinal_match = re.search(r'([1-4])(?:st|nd|rd|th)?\s*SEM', text, re.I)
+        # 2. Ordinal format explicitly attached to SEM: "1st SEM", "2nd SEM", "3rd SEM", "4th SEM"
+        ordinal_match = re.search(r'\b([1-4])(?:st|nd|rd|th)?\s*SEM\b', text, re.I)
         if ordinal_match: return ordinal_match.group(1)
         
-        # 4. Word format (expanded)
-        word_map = {"First": "1", "Second": "2", "Third": "3", "Fourth": "4"}
-        for word, num in word_map.items():
-            if word.lower() in text.lower(): return num
-        
-        # 5. Simple Digit fallbacks
-        if "sem-4" in text.lower() or "sem4" in text.lower(): return "4"
-        if "sem-3" in text.lower() or "sem3" in text.lower(): return "3"
-        if "sem-2" in text.lower() or "sem2" in text.lower(): return "2"
-        if "sem-1" in text.lower() or "sem1" in text.lower(): return "1"
+        # 3. Simple Digit hyphen fallbacks (strictly bound to "Sem")
+        for num in ["1", "2", "3", "4"]:
+            if f"sem-{num}" in text.lower() or f"sem{num}" in text.lower(): return num
 
+        # If it doesn't clearly say "Sem X" or "Xth Sem", it is GENERAL Generic info
         return "0"
 
     def _normalize_date(self, date_str):
