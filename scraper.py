@@ -12,8 +12,8 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        # Golden Fingerprint from successful subagent session
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        # Golden Fingerprint: Realistic Modern Chrome
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/info/online-class-schedule",
@@ -296,29 +296,42 @@ class MBAScraper:
                 for frame in page.frames:
                     if "vcs.php" in frame.url:
                         print(f"[CRAWLER]: Found INJECTED frame! Extracting...")
-                        it_tables = await frame.evaluate("""() => {
-                            return Array.from(document.querySelectorAll('table')).map(table => {
-                                return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                    Array.from(tr.querySelectorAll('td')).map(td => {
-                                        const a = td.querySelector('a');
-                                        return { text: td.innerText.trim(), href: a ? a.href : null };
-                                    })
-                                );
-                            });
-                        }""")
-                        if it_tables:
-                            all_raw_tables.extend(it_tables)
+                        try:
+                            # V13.0: LOG CONTENT FOR DEBUGGING
+                            f_content = await frame.content()
+                            print(f"[CRAWLER][DEBUG]: Injected Frame Content Snippet: {f_content[:200]}")
+                            
+                            it_tables = await frame.evaluate("""() => {
+                                const tables = Array.from(document.querySelectorAll('table'));
+                                return tables.map(table => {
+                                    return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                        Array.from(tr.querySelectorAll('td')).map(td => {
+                                            const a = td.querySelector('a');
+                                            return { text: td.innerText.trim(), href: a ? a.href : null };
+                                        })
+                                    );
+                                });
+                            }""")
+                            if it_tables:
+                                print(f"[CRAWLER]: Success! Extracted {len(it_tables)} tables from injected frame.")
+                                all_raw_tables.extend(it_tables)
+                            else:
+                                print("[CRAWLER][WARNING]: Injected frame found but it contains 0 tables.")
+                        except Exception as e:
+                            print(f"[CRAWLER][ERROR]: Extraction from injected frame failed: {e}")
 
             # 4. Fallback: ISOLATED ACCESS (If injection fails)
             if not all_raw_tables:
-                print("[CRAWLER]: Injection failed. Trying ISOLATED ACCESS fallback")
+                print("[CRAWLER]: Injection failed or empty. Trying ISOLATED ACCESS fallback")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
                     await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
                     await asyncio.sleep(15) 
                     page_len = len(await page.content())
+                    print(f"[CRAWLER][DEBUG]: Isolated visit result: {page_len} bytes.")
                     if page_len > 500:
+                         # ... rest of logic ...
                         direct_tables = await page.evaluate("""() => {
                             return Array.from(document.querySelectorAll('table')).map(table => {
                                 return Array.from(table.querySelectorAll('tr')).map(tr => 
