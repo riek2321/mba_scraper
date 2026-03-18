@@ -214,51 +214,50 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V7.2: FAST STABILIZATION
-        print(f"[CRAWLER]: Waiting for schedule content...")
-        await asyncio.sleep(5) 
+        # V8.4: ROBUST EXTRACTION
+        print(f"[CRAWLER]: Waiting for content in {len(page.frames)} frames...")
+        await asyncio.sleep(10) # Heavy stabilization for Render
         await self.auto_scroll(page)
-        await asyncio.sleep(2) 
-
-        print("[CRAWLER]: Parsing Online Class Schedule tables...")
+        
+        all_raw_tables = []
         try:
-            # Capture ALL tables from ALL frames to be safe
-            all_raw_tables = []
-            for frame in page.frames:
+            # 1. First Pass: Scan ALL Frames
+            for i, frame in enumerate(page.frames):
                 try:
-                    tables_data = await frame.evaluate("""() => {
-                        const tables = Array.from(document.querySelectorAll('table'));
-                        if (tables.length === 0) return null;
-                        return tables.map(table => {
-                            return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                Array.from(tr.querySelectorAll('td')).map(td => {
-                                    const a = td.querySelector('a');
-                                    return { text: td.innerText.trim(), href: a ? a.href : null };
-                                })
-                            );
-                        });
-                    }""")
-                    if tables_data: all_raw_tables.extend(tables_data)
+                    frame_url = frame.url
+                    if "vcs.php" in frame_url or i > 0:
+                        print(f"[CRAWLER][DEBUG]: Checking Frame {i} ({frame_url})...")
+                        tables_data = await frame.evaluate("""() => {
+                            const tables = Array.from(document.querySelectorAll('table'));
+                            if (tables.length === 0) return null;
+                            return tables.map(table => {
+                                return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                    Array.from(tr.querySelectorAll('td')).map(td => {
+                                        const a = td.querySelector('a');
+                                        return { text: td.innerText.trim(), href: a ? a.href : null };
+                                    })
+                                );
+                            });
+                        }""")
+                        if tables_data:
+                            print(f"[CRAWLER]: Found {len(tables_data)} tables in Frame {i}.")
+                            all_raw_tables.extend(tables_data)
                 except: continue
 
-            print(f"[CRAWLER][DEBUG]: Found {len(all_raw_tables)} raw tables in parent page frames.")
-            
-            # V7.0: If still no tables, Try DIRECT IFRAME URL (Bypassing parent completely)
+            # 2. Second Pass: If still no tables, try ISOLATED DIRECT ACCESS with Referer
             if not all_raw_tables:
-                print("[CRAWLER]: Parent page failed to reveal tables. Attempting DIRECT IFRAME ACCESS...")
+                print("[CRAWLER]: Parent page failed to reveal tables. Attempting ISOLATED ACCESS...")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
-                    # Use domcontentloaded instead of networkidle because blocked fonts/trackers 
-                    # can make networkidle timeout even if content is ready.
-                    await page.goto(vcs_url, wait_until="domcontentloaded", timeout=60000, 
+                    # Referer is CRITICAL for these internal PHP scripts
+                    await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
-                    # Wait for the table specifically
-                    try:
-                        await page.wait_for_selector("table", timeout=15000)
-                    except:
-                        pass
+                    await asyncio.sleep(10) # Let it render
                     
-                    await asyncio.sleep(5)
+                    # Log content for debugging Render failures
+                    page_len = len(await page.content())
+                    print(f"[CRAWLER][DEBUG]: Isolated vcs.php loaded ({page_len} bytes).")
+                    
                     direct_tables = await page.evaluate("""() => {
                         const tables = Array.from(document.querySelectorAll('table'));
                         return tables.map(table => {
@@ -271,12 +270,14 @@ class MBAScraper:
                         });
                     }""")
                     if direct_tables:
-                        print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via DIRECT ACCESS.")
+                        print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
                         all_raw_tables.extend(direct_tables)
+                    else:
+                        print("[CRAWLER][WARNING]: Isolated access loaded but NO tables found.")
                 except Exception as direct_e:
-                    print(f"[CRAWLER][ERROR]: Direct iframe access failed: {direct_e}")
+                    print(f"[CRAWLER][ERROR]: Isolated access failed: {direct_e}")
 
-            print(f"[CRAWLER][DEBUG]: Total raw tables collected: {len(all_raw_tables)}.")
+            print(f"[CRAWLER][DEBUG]: Final raw table count: {len(all_raw_tables)}")
             
             for rows in all_raw_tables:
                 # Find date within this specific table
