@@ -238,28 +238,28 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V8.7: LAZY-LOAD TRIGGER (Critical for Render)
-        print(f"[CRAWLER]: Triggering Physical Load (Scroll/Mouse) on {page.url}...")
+        # V12.0: FORCED INJECTION & KEYBOARD SCROLL (Ultimate Fix)
+        print(f"[CRAWLER]: Initializing Physical Load on {page.url}")
         try:
-            # 1. Simulate Human Interaction to trigger lazy-load scripts
-            await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+            # 1. Human-Like Keyboard Scrolling (More effective than JS scroll on some sites)
+            await page.mouse.move(random.randint(200, 400), random.randint(200, 400))
+            for _ in range(3):
+                await page.keyboard.press("PageDown")
+                await asyncio.sleep(1)
             await self.auto_scroll(page) 
-            await asyncio.sleep(15) # Stabilization after scroll
+            await asyncio.sleep(10) 
         except Exception as e:
             print(f"[CRAWLER][WARNING]: Interaction trigger failed: {e}")
 
         all_raw_tables = []
         try:
-            # 2. Main Frame Scan (Active Frame Search)
-            frames = page.frames
-            print(f"[CRAWLER]: Scanning {len(frames)} frames for schedule...")
-            
-            for i, frame in enumerate(frames):
+            # 2. Main Frame Scan
+            print(f"[CRAWLER]: Scanning {len(page.frames)} frames for schedule table")
+            for i, frame in enumerate(page.frames):
                 try:
                     frame_url = frame.url
-                    # We look for vcs.php or team_schedules specifically
                     if "vcs.php" in frame_url or "team_schedules" in frame_url:
-                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
+                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})")
                         tables_data = await frame.evaluate("""() => {
                             const tables = Array.from(document.querySelectorAll('table'));
                             if (tables.length === 0) return null;
@@ -273,22 +273,51 @@ class MBAScraper:
                             });
                         }""")
                         if tables_data:
-                            print(f"[CRAWLER]: Success! Found {len(tables_data)} tables in Frame {i}.")
+                            print(f"[CRAWLER]: Success! Found {len(tables_data)} tables in Frame {i}")
                             all_raw_tables.extend(tables_data)
                 except: continue
 
-            # 3. Fallback: If still no tables, try ISOLATED DIRECT ACCESS with Referer
+            # 3. Last Resort: MANUAL IFRAME INJECTION (If lazy-load failed)
             if not all_raw_tables:
-                print("[CRAWLER]: Physical trigger failed to reveal frames. Trying ISOLATED ACCESS fallback...")
+                print("[CRAWLER]: Frames missing. Attempting MANUAL IFRAME INJECTION...")
+                await page.evaluate("""() => {
+                    if (!document.querySelector('iframe[src*="vcs.php"]')) {
+                        const ifrm = document.createElement('iframe');
+                        ifrm.src = 'https://web.sol.du.ac.in/my/team_schedules/vcs.php';
+                        ifrm.id = 'manual_schedule_frame';
+                        ifrm.style.width = '100%';
+                        ifrm.style.height = '1000px';
+                        document.body.appendChild(ifrm);
+                    }
+                }""")
+                await asyncio.sleep(10) # Let injected frame load
+                
+                # Re-scan for the injected frame
+                for frame in page.frames:
+                    if "vcs.php" in frame.url:
+                        print(f"[CRAWLER]: Found INJECTED frame! Extracting...")
+                        it_tables = await frame.evaluate("""() => {
+                            return Array.from(document.querySelectorAll('table')).map(table => {
+                                return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                    Array.from(tr.querySelectorAll('td')).map(td => {
+                                        const a = td.querySelector('a');
+                                        return { text: td.innerText.trim(), href: a ? a.href : null };
+                                    })
+                                );
+                            });
+                        }""")
+                        if it_tables:
+                            all_raw_tables.extend(it_tables)
+
+            # 4. Fallback: ISOLATED ACCESS (If injection fails)
+            if not all_raw_tables:
+                print("[CRAWLER]: Injection failed. Trying ISOLATED ACCESS fallback")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
                     await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
                     await asyncio.sleep(15) 
-                    
                     page_len = len(await page.content())
-                    print(f"[CRAWLER][DEBUG]: Isolated visit result: {page_len} bytes.")
-                    
                     if page_len > 500:
                         direct_tables = await page.evaluate("""() => {
                             return Array.from(document.querySelectorAll('table')).map(table => {
@@ -301,14 +330,10 @@ class MBAScraper:
                             });
                         }""")
                         if direct_tables:
-                            print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
                             all_raw_tables.extend(direct_tables)
-                    else:
-                        print(f"[CRAWLER][WARNING]: Isolated page too small ({page_len}b). likely blocked.")
-                except Exception as direct_e:
-                    print(f"[CRAWLER][ERROR]: Isolated access failed: {direct_e}")
+                except: pass
 
-            print(f"[CRAWLER][DEBUG]: Final raw table count: {len(all_raw_tables)}")
+            print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
             
             for rows in all_raw_tables:
                 # Find date within this specific table
