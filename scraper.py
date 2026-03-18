@@ -146,7 +146,7 @@ class MBAScraper:
                     found = True
                 
                 if found:
-                    await page.wait_for_load_state("networkidle", timeout=60000)
+                    await page.wait_for_load_state("load", timeout=60000)
                 else:
                     print(f"[CRAWLER][FAIL]: Could not resolve navigation path for {url}")
                     return
@@ -168,7 +168,7 @@ class MBAScraper:
                     print(f"               Page Title: {await page.title()}")
                     return
             else:
-                await page.wait_for_load_state("networkidle", timeout=45000)
+                await page.wait_for_load_state("load", timeout=45000)
             
             # 1. Handle specialized pages (like tables in Online Classes)
             if "online-class-schedule" in url:
@@ -208,22 +208,22 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V6.8: TRUSTED IFRAME CONTENT
-        # We no longer goto() the iframe directly as it triggers 403. 
-        # Instead we wait for the parent page to load it and then parse all frames.
-        print(f"[CRAWLER]: Waiting for schedule iframe content to stabilize...")
-        await asyncio.sleep(15) 
-        await self.auto_scroll(page)
+        # V7.2: FAST STABILIZATION
+        print(f"[CRAWLER]: Waiting for schedule content...")
         await asyncio.sleep(5) 
+        await self.auto_scroll(page)
+        await asyncio.sleep(2) 
 
-        print("[CRAWLER]: Parsing Online Class Schedule tables (Hyper-Robust)...")
+        print("[CRAWLER]: Parsing Online Class Schedule tables...")
         try:
             # Capture ALL tables from ALL frames to be safe
             all_raw_tables = []
             for frame in page.frames:
                 try:
                     tables_data = await frame.evaluate("""() => {
-                        return Array.from(document.querySelectorAll('table')).map(table => {
+                        const tables = Array.from(document.querySelectorAll('table'));
+                        if (tables.length === 0) return null;
+                        return tables.map(table => {
                             return Array.from(table.querySelectorAll('tr')).map(tr => 
                                 Array.from(tr.querySelectorAll('td')).map(td => {
                                     const a = td.querySelector('a');
@@ -242,12 +242,19 @@ class MBAScraper:
                 print("[CRAWLER]: Parent page failed to reveal tables. Attempting DIRECT IFRAME ACCESS...")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
-                    # We use a new page/context or just navigate the current one to the iframe source
-                    # But often the iframe source needs to be visited directly to bypass frame restrictions
-                    await page.goto(vcs_url, wait_until="networkidle", timeout=60000)
+                    # Use domcontentloaded instead of networkidle because blocked fonts/trackers 
+                    # can make networkidle timeout even if content is ready.
+                    await page.goto(vcs_url, wait_until="domcontentloaded", timeout=60000)
+                    # Wait for the table specifically
+                    try:
+                        await page.wait_for_selector("table", timeout=15000)
+                    except:
+                        pass
+                    
                     await asyncio.sleep(5)
                     direct_tables = await page.evaluate("""() => {
-                        return Array.from(document.querySelectorAll('table')).map(table => {
+                        const tables = Array.from(document.querySelectorAll('table'));
+                        return tables.map(table => {
                             return Array.from(table.querySelectorAll('tr')).map(tr => 
                                 Array.from(tr.querySelectorAll('td')).map(td => {
                                     const a = td.querySelector('a');
