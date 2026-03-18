@@ -14,16 +14,23 @@ class MBAScraper:
         self.days_back = 15 # Default
         # Golden Fingerprint from successful subagent session
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        self.targets = [
+            "https://sol.du.ac.in/home.php",
+            "https://web.sol.du.ac.in/info/online-class-schedule",
+            "https://sol.du.ac.in/all-notices.php"
+        ]
 
-    async def run(self, days_back=None, targets=None):
+    async def run(self, days_back=15, targets=None):
+        """Execute the simplified 3-page targeted scraping job like a 'normal human'"""
+        self.days_back = days_back
+        self.targets = targets or self.targets
+        
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            # V5 STEALTH: Advanced Human Fingerprinting
             headers = {
                 "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Cache-Control": "max-age=0",
-                "DNT": "1",
                 "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
                 "Sec-Ch-Ua-Mobile": "?0",
                 "Sec-Ch-Ua-Platform": '"Windows"',
@@ -41,35 +48,34 @@ class MBAScraper:
                 timezone_id="Asia/Kolkata"
             )
             page = await context.new_page()
-            # Advanced Evasive markers (V2)
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
                 window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
                 Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
                 Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en-GB', 'en-US', 'en'] });
             """)
-            
-            self.visited = set()
-            self.notices = []
-            self.days_back = days_back if days_back is not None else self.days_back
-            
-            # Key targets for deep scan - STRICTLY AS REQUESTED
-            all_targets = [
-                "https://sol.du.ac.in/home.php",
-                "https://web.sol.du.ac.in/info/online-class-schedule",
-                "https://sol.du.ac.in/all-notices.php"
-            ]
-            
-            start_urls = targets if targets else all_targets
-            
-            print(f"[CRAWLER]: Starting scan of {len(start_urls)} target areas")
-            for url in start_urls:
-                # Patient waiting to seem more human and allow server response
-                await asyncio.sleep(random.uniform(3.0, 6.0))
-                # Strict 0 depth - do not follow any links deep
-                await self.crawl(page, url, depth=0, max_depth=0) 
-            
-            await browser.close()
+
+            print(f"[CRAWLER]: Starting scan of 3 target areas sequentially...")
+            try:
+                for url in self.targets:
+                    print(f"[CRAWLER][DIRECT]: Visiting target {url}...")
+                    try:
+                        await page.goto(url, wait_until="load", timeout=90000)
+                        await asyncio.sleep(random.uniform(5, 8))
+                        
+                        if "online-class-schedule" in url:
+                            await self.extract_online_classes(page)
+                        elif "all-notices" in url or "home" in url:
+                            await self.extract_legacy_notices(page)
+                        
+                        await self.expand_content(page)
+                        await self.extract_mba_content(page)
+                    except Exception as visit_e:
+                        print(f"[CRAWLER][ERROR]: Failed to visit {url}: {visit_e}")
+            except Exception as e:
+                print(f"[CRAWLER][ERROR]: Runner failed: {e}")
+            finally:
+                await browser.close()
             return self.notices
 
     async def crawl(self, page, url, depth, max_depth):
@@ -244,7 +250,8 @@ class MBAScraper:
                 try:
                     # Use domcontentloaded instead of networkidle because blocked fonts/trackers 
                     # can make networkidle timeout even if content is ready.
-                    await page.goto(vcs_url, wait_until="domcontentloaded", timeout=60000)
+                    await page.goto(vcs_url, wait_until="domcontentloaded", timeout=60000, 
+                                   referer="https://web.sol.du.ac.in/info/online-class-schedule")
                     # Wait for the table specifically
                     try:
                         await page.wait_for_selector("table", timeout=15000)
