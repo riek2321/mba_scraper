@@ -235,7 +235,34 @@ class MBAScraper:
                     if tables_data: all_raw_tables.extend(tables_data)
                 except: continue
 
-            print(f"[CRAWLER][DEBUG]: Found {len(all_raw_tables)} raw tables.")
+            print(f"[CRAWLER][DEBUG]: Found {len(all_raw_tables)} raw tables in parent page frames.")
+            
+            # V7.0: If still no tables, Try DIRECT IFRAME URL (Bypassing parent completely)
+            if not all_raw_tables:
+                print("[CRAWLER]: Parent page failed to reveal tables. Attempting DIRECT IFRAME ACCESS...")
+                vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
+                try:
+                    # We use a new page/context or just navigate the current one to the iframe source
+                    # But often the iframe source needs to be visited directly to bypass frame restrictions
+                    await page.goto(vcs_url, wait_until="networkidle", timeout=60000)
+                    await asyncio.sleep(5)
+                    direct_tables = await page.evaluate("""() => {
+                        return Array.from(document.querySelectorAll('table')).map(table => {
+                            return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                Array.from(tr.querySelectorAll('td')).map(td => {
+                                    const a = td.querySelector('a');
+                                    return { text: td.innerText.trim(), href: a ? a.href : null };
+                                })
+                            );
+                        });
+                    }""")
+                    if direct_tables:
+                        print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via DIRECT ACCESS.")
+                        all_raw_tables.extend(direct_tables)
+                except Exception as direct_e:
+                    print(f"[CRAWLER][ERROR]: Direct iframe access failed: {direct_e}")
+
+            print(f"[CRAWLER][DEBUG]: Total raw tables collected: {len(all_raw_tables)}.")
             
             for rows in all_raw_tables:
                 # Find date within this specific table
@@ -440,7 +467,6 @@ class MBAScraper:
         if not text: return "0"
         
         # 1. Standard "Sem 1", "Semester - II", "Sem IV", "Sem: 3"
-        # STRICT REQUIREMENT: Number/Roman MUST be directly adjacent to 'Sem' or 'Semester'
         sem_match = re.search(r'\bSem(?:ester)?\s*[-: ]*\s*([1-4]|I{1,3}|IV)\b', text, re.I)
         if sem_match: 
             val = sem_match.group(1).upper()
@@ -458,7 +484,19 @@ class MBAScraper:
         for num in ["1", "2", "3", "4"]:
             if f"sem-{num}" in text.lower() or f"sem{num}" in text.lower(): return num
 
-        # If it doesn't clearly say "Sem X" or "Xth Sem", it is GENERAL Generic info
+        # 4. "MBA" + specific number / word / roman numeral combinations
+        # E.g. "MBA I", "MBA First", "MBA 1"
+        if "mba" in text.lower() or "master of business" in text.lower():
+            # Check 4 first (IV)
+            if re.search(r'\b(4|IV|Fourth)\b', text, re.I): return "4"
+            # Check 3 (III)
+            if re.search(r'\b(3|III|Third)\b', text, re.I): return "3"
+            # Check 2 (II)  
+            if re.search(r'\b(2|II|Second)\b', text, re.I): return "2"
+            # Check 1 (I) - "I" as a standalone word
+            if re.search(r'\b(1|I|First)\b', text, re.I): return "1"
+
+        # If it doesn't clearly say "Sem X" or "MBA X", it is General info
         return "0"
 
     def _normalize_date(self, date_str):
