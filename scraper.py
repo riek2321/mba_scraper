@@ -238,20 +238,28 @@ class MBAScraper:
 
     async def extract_online_classes(self, page):
         """Specifically parse the online class schedule table"""
-        # V8.6: TARGETED FRAME SCAN (New Tab Aware)
-        print(f"[CRAWLER]: Scanning {len(page.frames)} frames on {page.url}...")
-        await asyncio.sleep(15) # Max stabilization for Render
-        await self.auto_scroll(page)
-        
+        # V8.7: LAZY-LOAD TRIGGER (Critical for Render)
+        print(f"[CRAWLER]: Triggering Physical Load (Scroll/Mouse) on {page.url}...")
+        try:
+            # 1. Simulate Human Interaction to trigger lazy-load scripts
+            await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+            await self.auto_scroll(page) 
+            await asyncio.sleep(15) # Stabilization after scroll
+        except Exception as e:
+            print(f"[CRAWLER][WARNING]: Interaction trigger failed: {e}")
+
         all_raw_tables = []
         try:
-            # 1. First Pass: Scan ALL Frames (Active Frame Search)
-            for i, frame in enumerate(page.frames):
+            # 2. Main Frame Scan (Active Frame Search)
+            frames = page.frames
+            print(f"[CRAWLER]: Scanning {len(frames)} frames for schedule...")
+            
+            for i, frame in enumerate(frames):
                 try:
                     frame_url = frame.url
-                    print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
-                    # Target both exact vcs.php and any internal frames
+                    # We look for vcs.php or team_schedules specifically
                     if "vcs.php" in frame_url or "team_schedules" in frame_url:
+                        print(f"[CRAWLER][DEBUG]: Examining Frame {i} ({frame_url})...")
                         tables_data = await frame.evaluate("""() => {
                             const tables = Array.from(document.querySelectorAll('table'));
                             if (tables.length === 0) return null;
@@ -269,12 +277,11 @@ class MBAScraper:
                             all_raw_tables.extend(tables_data)
                 except: continue
 
-            # 2. Second Pass: If still no tables, try ISOLATED DIRECT ACCESS with Referer
+            # 3. Fallback: If still no tables, try ISOLATED DIRECT ACCESS with Referer
             if not all_raw_tables:
-                print("[CRAWLER]: Parent frames failed. Attempting ISOLATED ACCESS fallback...")
+                print("[CRAWLER]: Physical trigger failed to reveal frames. Trying ISOLATED ACCESS fallback...")
                 vcs_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                 try:
-                    # Referer is CRITICAL
                     await page.goto(vcs_url, wait_until="load", timeout=90000, 
                                    referer="https://web.sol.du.ac.in/info/online-class-schedule")
                     await asyncio.sleep(15) 
@@ -282,7 +289,7 @@ class MBAScraper:
                     page_len = len(await page.content())
                     print(f"[CRAWLER][DEBUG]: Isolated visit result: {page_len} bytes.")
                     
-                    if page_len > 500: # Actually has content
+                    if page_len > 500:
                         direct_tables = await page.evaluate("""() => {
                             return Array.from(document.querySelectorAll('table')).map(table => {
                                 return Array.from(table.querySelectorAll('tr')).map(tr => 
@@ -297,7 +304,7 @@ class MBAScraper:
                             print(f"[CRAWLER]: Success! Found {len(direct_tables)} tables via ISOLATED ACCESS.")
                             all_raw_tables.extend(direct_tables)
                     else:
-                        print(f"[CRAWLER][WARNING]: Isolated page too small ({page_len}b). Blocked.")
+                        print(f"[CRAWLER][WARNING]: Isolated page too small ({page_len}b). likely blocked.")
                 except Exception as direct_e:
                     print(f"[CRAWLER][ERROR]: Isolated access failed: {direct_e}")
 
