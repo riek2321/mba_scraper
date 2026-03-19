@@ -35,8 +35,8 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        # V28.0: ULTIMATE STEALTH USER-AGENT (Chrome v131)
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        # V29.0: MOBILE EVASION (Pixel 7 Fingerprint)
+        self.user_agent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
