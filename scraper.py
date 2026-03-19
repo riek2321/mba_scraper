@@ -43,8 +43,8 @@ class MBAScraper:
         self.notices = []
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
-        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "652ee4df232c710d89ef5c6a7b5df80d")
-        print(f"[JOB]: Scraper API Key configured: {'YES' if self.scraper_api_key else 'NO'}")
+        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "03773f4b-6865-442d-8863-6a31270230cd")
+        print(f"[JOB]: Scraping API Key configured: {'YES' if self.scraper_api_key else 'NO'}")
         print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
             "https://sol.du.ac.in/home.php",
@@ -53,22 +53,30 @@ class MBAScraper:
         ]
 
     async def fetch_via_api(self, url: str) -> Optional[str]:
-        """V50.0: Level 3 Bypass via Scraping API (Residential Proxies)"""
+        """V51.0: Level 3 Bypass via Scraping API (Supports ScraperAPI & WebScraping.ai)"""
         if not self.scraper_api_key:
             return None
             
         print(f"[CRAWLER][API]: Attempting residential proxy fetch for {url}...")
         try:
-            # ScraperAPI format
-            api_url = f"http://api.scraperapi.com?api_key={self.scraper_api_key}&url={url}"
-            # Add render_js=true if hitting the main page, but direct vcs.php might not need it
-            if "vcs.php" not in url:
-                api_url += "&render_js=true"
+            # v51.0: Detect API provider based on key format
+            # WebScraping.ai keys are UUIDs (36 chars with dashes)
+            is_ws_ai = "-" in self.scraper_api_key
+            
+            if is_ws_ai:
+                # WebScraping.ai endpoint
+                api_url = f"https://api.webscraping.ai/html?url={url}&api_key={self.scraper_api_key}&proxy=residential&render=true"
+            else:
+                # ScraperAPI format
+                api_url = f"http://api.scraperapi.com?api_key={self.scraper_api_key}&url={url}"
+                if "vcs.php" not in url:
+                    api_url += "&render_js=true"
                 
             loop = asyncio.get_event_loop()
-            # Fix: provide a clear function for run_in_executor
             def sync_get(u):
-                return requests.get(u, timeout=60)
+                # Add Referer to bypass domain-level checks if possible
+                h = {"Referer": "https://sol.du.ac.in/"}
+                return requests.get(u, headers=h, timeout=60)
                 
             response = await loop.run_in_executor(None, sync_get, api_url)
             
@@ -76,6 +84,12 @@ class MBAScraper:
                 print(f"[CRAWLER][API]: Success! Fetched {len(response.text)} chars.")
                 return response.text
             else:
+                # v51.0: Detect and handle WebScraping.ai errors specifically
+                if is_ws_ai and response.status_code == 500:
+                    try:
+                        err_data = response.json()
+                        print(f"[CRAWLER][API]: Target page error: {err_data.get('status_code')} - {err_data.get('message')}")
+                    except Exception: pass
                 print(f"[CRAWLER][API]: Failed with status {response.status_code}")
                 return None
         except Exception as e:
