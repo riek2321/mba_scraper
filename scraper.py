@@ -35,7 +35,8 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81"
+        # V19.0: Modern Professional Headers (Microsoft Edge on Windows)
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.3060.0"
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/info/online-class-schedule", # Visit Parent instead of Direct vcs.php
@@ -120,46 +121,37 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.6: IN-BROWSER FETCH (The "Ghost" Protocol)
-                        # Instead of navigating to the schedule page (WAF target),
-                        # we stay on a "safe" page (Home) and use the browser's authenticated
-                        # session to fetch the vcs.php content via Javascript.
+                        # V19.0: GOLDEN LOGIC RESTORED (Stable Direct Navigation)
+                        # Instead of 'Ghost Fetch' which is flagged, we use natural progression.
                         home_url = "https://web.sol.du.ac.in/home"
-                        print(f"[CRAWLER][STEALTH]: Navigating to Safe Hub: {home_url}")
+                        support_url = "https://web.sol.du.ac.in/info/student-support"
+                        target_url = "https://web.sol.du.ac.in/info/online-class-schedule"
                         
-                        await page.goto(home_url, wait_until="networkidle", timeout=90000)
-                        await asyncio.sleep(random.uniform(5, 10))
+                        print(f"[CRAWLER][STEALTH]: Priming Session (Home): {home_url}")
+                        await page.goto(home_url, wait_until="networkidle", timeout=60000)
+                        await asyncio.sleep(random.uniform(3, 6))
                         
-                        print("[CRAWLER][STEALTH]: Executing Ghost Fetch for vcs.php...")
-                        vcs_content = await page.evaluate("""async () => {
-                            try {
-                                const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
-                                    headers: {
-                                        'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule',
-                                        'X-Requested-With': 'XMLHttpRequest'
-                                    }
-                                });
-                                if (!response.ok) return `FETCH_ERROR_${response.status}`;
-                                return await response.text();
-                            } catch (e) {
-                                return `FETCH_EXCEPTION_${e.message}`;
-                            }
-                        }""")
+                        # Add Human Interaction
+                        print("[CRAWLER][STEALTH]: Simulating Human Scroll on Home...")
+                        await page.mouse.wheel(0, 500)
+                        await asyncio.sleep(1)
+                        await page.mouse.wheel(0, -300)
                         
-                        if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
-                            print(f"[CRAWLER][STEALTH][ERROR]: Ghost Fetch failed: {vcs_content}")
-                            # Final fallback: Attempt direct navigation if fetch failed
-                            print("[CRAWLER][STEALTH]: Final attempt: Direct Navigation...")
-                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=60000)
-                        else:
-                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content for parsing...")
-                            # Inject the fetched HTML into a temporary container on the current page for parsing
-                            await page.evaluate(f"""(html) => {{
-                                const div = document.createElement('div');
-                                div.id = 'ghost-vcs-container';
-                                div.innerHTML = html;
-                                document.body.appendChild(div);
-                            }}""", vcs_content)
+                        print(f"[CRAWLER][STEALTH]: Navigating to Target with Referer: {target_url}")
+                        await page.goto(target_url, wait_until="load", timeout=90000, referer=home_url)
+                        
+                        print("[CRAWLER][STEALTH]: Final Stealth Interaction (Wait for Dynamic Table)...")
+                        # Real human wait and small movements
+                        for _ in range(3):
+                            await page.mouse.move(random.randint(100, 700), random.randint(100, 500))
+                            await asyncio.sleep(random.uniform(2, 4))
+                        
+                        # Wait for the table element to appear (vcs_table or generic table)
+                        try:
+                            await page.wait_for_selector(".table-striped", timeout=30000)
+                            print("[CRAWLER][GOLDEN]: Table detected successfully!")
+                        except Exception:
+                            print("[CRAWLER][WARNING]: Table not found after wait. Attempting extraction anyway.")
                         
                         await self.extract_online_classes(page)
                     else:
@@ -403,10 +395,14 @@ class MBAScraper:
     def extract_semester_logic(self, text: str) -> str:
         if not text: return "0"
         
-        # V18.7: Detect multi-semester ranges or lists (e.g. I-IV, 1-4)
-        if re.search(r'\b(?:Sem(?:ester)?|SEM\.?)\s*[I1V][ -]+[I4V]\b', text, re.I) or \
-           re.search(r'I, II, III, IV', text, re.I) or \
-           re.search(r'1, 2, 3, 4', text, re.I):
+        # V18.8: Multi-semester detection (e.g. I-IV, I to IV, I,II,III,IV)
+        multi_patterns = [
+            r'\bI\b.*?\bIV\b',     # I...IV range
+            r'\b1\b.*?\b4\b',     # 1...4 range
+            r'I, II, III, IV',    # Standard list
+            r'All\s+Sem', r'Entire\s+Programme'
+        ]
+        if any(re.search(p, text, re.I) for p in multi_patterns):
             return "0"
 
         sem_match = re.search(r'\bSem(?:ester)?\s*[-: ]*\s*([1-4]|I{1,3}|IV)\b', text, re.I)
