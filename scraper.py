@@ -82,9 +82,16 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V15.0: Direct Extraction prioritized
+                        # V17.0: STEALTH NAVIGATION - Visit parent page first to establish full session context
+                        parent_url = "https://web.sol.du.ac.in/info/online-class-schedule"
+                        print(f"[CRAWLER][STEALTH]: Visiting parent {parent_url} first...")
+                        await page.goto(parent_url, wait_until="networkidle", timeout=60000)
+                        await asyncio.sleep(random.uniform(3, 7))
+                        
+                        print(f"[CRAWLER][STEALTH]: Now navigating to direct source {url}...")
+                        # V15.0: Direct Extraction prioritized with manual Referer
                         await page.goto(url, wait_until="load", timeout=90000, 
-                                       referer="https://web.sol.du.ac.in/info/online-class-schedule")
+                                       referer=parent_url)
                         await self.extract_online_classes(page)
                     else:
                         await page.goto(url, wait_until="domcontentloaded", timeout=90000)
@@ -101,7 +108,6 @@ class MBAScraper:
 
             await browser.close()
             print(f"[JOB]: Scan found {len(self.notices)} possible MBA items.")
-            await self.process_and_sync()
             return self.notices # v16.0: Fix NoneType error in main.py
 
     async def extract_online_classes(self, page):
@@ -372,41 +378,6 @@ class MBAScraper:
             await asyncio.sleep(2)
         except Exception: pass
 
-    async def process_and_sync(self):
-        try:
-            from notifier import Notifier # type: ignore
-            api_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
-            scraper_key = os.environ.get("SCRAPER_KEY", "7072")
-            notifier = Notifier(api_url, scraper_key)
-            
-            print(f"[JOB]: Processing {len(self.notices)} items for sync...")
-            for sem in ["1", "2", "3", "4", "0"]:
-                sem_items = [n for n in self.notices if n['semester'] == sem]
-                if not sem_items: continue
-                
-                print(f"[JOB]: Processing Semester {sem}...")
-                existing = notifier.get_from_website(sem) # type: ignore
-                
-                # V15.0: Harden existing_links extraction
-                if isinstance(existing, list):
-                    existing_links = []
-                    for e in existing:
-                        if isinstance(e, dict) and e.get('link'):
-                            existing_links.append(e.get('link'))
-                    
-                    for item in sem_items:
-                        link = item.get('link')
-                        title = item.get('title', 'Unknown Notice')
-                        if link and link not in existing_links: # type: ignore
-                            print(f"[JOB]: New item found, syncing to backend: {str(title)[:50]}") # type: ignore
-                            success = notifier.sync_to_website(item) # type: ignore
-                            if not success:
-                                print(f"[JOB][WARNING]: Sync failed for {str(title)[:30]}. Check SCRAPER_KEY.") # type: ignore
-                else:
-                    print(f"[JOB][ERROR]: Backend returned invalid data for Sem {sem}. Skipping sync.")
-
-        except Exception as e:
-            print(f"[JOB][ERROR]: Sync failed: {e}")
 
 if __name__ == "__main__":
     scraper = MBAScraper()

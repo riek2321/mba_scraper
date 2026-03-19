@@ -71,7 +71,8 @@ async def job(targets=None):
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",
                     "Sec-Fetch-User": "?1",
-                    "Upgrade-Insecure-Requests": "1"
+                    "Upgrade-Insecure-Requests": "1",
+                    "Referer": "https://web.sol.du.ac.in/info/online-class-schedule"
                 }
                 resp = requests.get(CLASS_URL, headers=probe_headers, timeout=20)
                 

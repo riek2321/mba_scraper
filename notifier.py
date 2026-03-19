@@ -33,7 +33,7 @@ class Notifier:
         for i in range(max_retries):
             try:
                 response = requests.request(method, url, timeout=30, **kwargs)
-                if response.status_code in [200, 201]:
+                if response.status_code in [200, 201, 409]:
                     return response
                 print(f"[API][RETRY {i+1}]: {method} {url} returned {response.status_code}")
             except Exception as e:
