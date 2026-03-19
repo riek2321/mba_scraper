@@ -135,16 +135,15 @@ async def job(targets=None):
                     backend_item = backend_items_map.get(title)
                     
                     if not backend_item:
-                        # NEW or DELETED: If it's in our DB but not backend, it was likely processed once and then deleted.
-                        # We only sync if it's NOT in our DB.
-                        if db.save_link(link, title, sem):
-                            print(f"[JOB]: New item found, syncing to backend: {title}")
-                            notice['semester'] = sem # type: ignore
-                            notifier.sync_to_website(notice) # type: ignore
+                        # NEW or MISSING: Sync if not in backend.
+                        # We also update our DB to remember we processed it.
+                        print(f"[JOB]: Item {title} not in backend (Sem {sem}). Syncing...")
+                        notice['semester'] = sem  # type: ignore
+                        if notifier.sync_to_website(notice): # type: ignore
+                            db.save_link(link, title, sem)
+                            print(f"[JOB]: Sync successful for {title}")
                         else:
-                            # Already in DB but missing from backend = Already processed + Deleted by admin.
-                            # We respect the deletion and DON'T re-sync.
-                            pass
+                            print(f"[JOB][ERROR]: Sync failed for {title}")
                     else:
                         # EXISTING: Update if link or description changed
                         curr_link = backend_item.get('link', '')

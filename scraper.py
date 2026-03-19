@@ -212,9 +212,9 @@ class MBAScraper:
                         if (tables.length === 0) return null;
                         return tables.map(table => {
                             return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                Array.from(tr.querySelectorAll('td')).map(td => {
-                                    const a = td.querySelector('a');
-                                    return { text: td.innerText.trim(), href: a ? a.href : null };
+                                Array.from(tr.querySelectorAll('td, th')).map(cell => {
+                                    const a = cell.querySelector('a');
+                                    return { text: cell.innerText.trim(), href: a ? a.href : null };
                                 })
                             );
                         });
