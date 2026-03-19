@@ -44,6 +44,8 @@ class MBAScraper:
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
         self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
+        print(f"[JOB]: Scraper API Key configured: {'YES' if self.scraper_api_key else 'NO'}")
+        print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
