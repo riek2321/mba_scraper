@@ -717,8 +717,8 @@ class MBAScraper:
 
 if __name__ == "__main__":
     # V30.0: Configuration from Environment (for GitHub Actions)
-    backend_url = os.environ.get("BACKEND_URL", "https://mba-scraper.onrender.com")
-    scraper_key = os.environ.get("SCRAPER_KEY", "your-secret-key-123")
+    backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
+    scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
     print(f"[JOB]: Starting Scraper with Backend: {backend_url}")
     scraper = MBAScraper()
