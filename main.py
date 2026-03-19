@@ -62,7 +62,7 @@ async def job(targets=None):
             try:
                 # Use very stealthy headers for the probe (Matching v17.0 Scraper)
                 probe_headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81",
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
                     "Accept-Encoding": "gzip, deflate, br",
@@ -74,6 +74,7 @@ async def job(targets=None):
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",
                     "Sec-Fetch-User": "?1",
+                    "Accept-Encoding": "gzip, deflate, br",
                     "Upgrade-Insecure-Requests": "1"
                 }
                 resp = requests.get(CLASS_URL, headers=probe_headers, timeout=20)

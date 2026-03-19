@@ -17,6 +17,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from playwright_stealth import stealth_async # type: ignore
+except ImportError:
+    pass
+
 # Internal project import
 try:
     from notifier import Notifier # type: ignore
@@ -30,7 +35,7 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81"
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/info/online-class-schedule", # Visit Parent instead of Direct vcs.php
@@ -45,15 +50,17 @@ class MBAScraper:
             
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Sec-Ch-Ua": '"Microsoft Edge";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
                 "Sec-Ch-Ua-Mobile": "?0",
                 "Sec-Ch-Ua-Platform": '"Windows"',
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
                 "Sec-Fetch-User": "?1",
-                "Upgrade-Insecure-Requests": "1"
+                "Accept-Encoding": "gzip, deflate, br",
+                "Upgrade-Insecure-Requests": "1",
+                "Cache-Control": "max-age=0"
             }
             
             context = await browser.new_context(
@@ -62,19 +69,30 @@ class MBAScraper:
                 viewport={'width': 1920, 'height': 1080}
             )
             page = await context.new_page()
-
-            # v17.0: ADVANCED SESSION PRIMER
-            print("[CRAWLER]: Priming Multi-Step Session (web.sol.du.ac.in)")
+            
+            # v17.0: STEALTH LAYER
             try:
-                # Step 1: Root site
-                print("[CRAWLER][PRIMER]: Visiting Root...")
+                await stealth_async(page)
+                print("[CRAWLER]: Stealth signatures applied.")
+            except Exception: pass
+
+            # v17.0: ADVANCED SESSION PRIMER (Warming up the entire domain)
+            print("[CRAWLER]: Priming Multi-Step Session (sol.du.ac.in + web.sol.du.ac.in)")
+            try:
+                # Step 0: Main portal
+                print("[CRAWLER][PRIMER]: Visiting Main Portal...")
+                await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(random.uniform(3, 6))
+
+                # Step 1: Subdomain Root
+                print("[CRAWLER][PRIMER]: Visiting Subdomain Root...")
                 await page.goto("https://web.sol.du.ac.in/home", wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(random.uniform(5, 8))
+                await asyncio.sleep(random.uniform(3, 6))
                 
-                # Step 2: Intermediate page (Student Support or similar)
+                # Step 2: Intermediate page (Student Support)
                 print("[CRAWLER][PRIMER]: Visiting Student Support...")
                 await page.goto("https://web.sol.du.ac.in/info/student-support", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(random.uniform(3, 5))
+                await asyncio.sleep(random.uniform(2, 4))
             except Exception as e: 
                 print(f"[CRAWLER][PRIMER][WARNING]: Primer interrupted: {e}")
 
@@ -100,13 +118,17 @@ class MBAScraper:
                         target_page = "https://web.sol.du.ac.in/info/online-class-schedule"
                         print(f"[CRAWLER][STEALTH]: Navigating to official schedule page: {target_page}")
                         
-                        await page.goto(target_page, wait_until="networkidle", timeout=90000)
-                        await asyncio.sleep(random.uniform(10, 15)) # Give iframe plenty of time
+                        # Add referer explicitly to navigation
+                        await page.goto(target_page, wait_until="load", timeout=90000, 
+                                       referer="https://web.sol.du.ac.in/home")
+                        
+                        print("[CRAWLER][STEALTH]: Waiting for iframe stability...")
+                        await asyncio.sleep(random.uniform(5, 10))
                         
                         # Extra interaction to ensure iframe is keyed
-                        await page.mouse.wheel(0, 500)
+                        await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+                        await page.mouse.wheel(0, 300)
                         await asyncio.sleep(2)
-                        await page.mouse.wheel(0, -500)
                         
                         await self.extract_online_classes(page)
                     else:
