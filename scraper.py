@@ -200,18 +200,22 @@ class MBAScraper:
         all_raw_tables = []
         try:
             # Aggressive Frame Hunting (V23.0)
-            # If we are on the info page, look for the vcs iframe
             if "online-class-schedule" in page.url:
                 frame_urls = await page.evaluate("""() => {
                     return Array.from(document.querySelectorAll('iframe, frame')).map(f => f.src);
                 }""")
                 for furl in frame_urls:
                     if "vcs.php" in furl:
-                        print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {furl}. Navigating top-level to bypass cross-origin block.")
+                        print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {furl}. Navigating top-level.")
                         await page.goto(furl, wait_until="networkidle", timeout=60000)
                         await asyncio.sleep(5)
                         break
 
+            # V24.0: DIAGNOSTIC LOGGING
+            print(f"[CRAWLER][DIAGNOSTIC]: Page Title: {await page.title()}")
+            content_snippet = await page.content()
+            print(f"[CRAWLER][DIAGNOSTIC]: Content Snippet (first 1000): {content_snippet[:1000]}")
+            
             contexts_to_scan = [page] + page.frames
             print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
             
