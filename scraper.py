@@ -355,7 +355,7 @@ class MBAScraper:
                     
                     print(f"[CRAWLER][LEGACY FOUND]: {text.strip()} (Sem {semester})")
                     description = f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA information."
-                    if "online class" in text.lower() or "schedule" in text.lower():
+                    if "online class" in text.lower() or "live class" in text.lower() or "vcs" in text.lower():
                         description = f"MBA Live Class: {text.strip()}"
 
                     self.notices.append({
@@ -386,7 +386,7 @@ class MBAScraper:
                         semester = self.extract_semester_logic(text)
                         
                         description = "General MBA information."
-                        if "online class" in text.lower() or "schedule" in text.lower():
+                        if "online class" in text.lower() or "live class" in text.lower() or "vcs" in text.lower():
                             description = f"MBA Live Class: {text.strip()}"
 
                         self.notices.append({
