@@ -49,7 +49,17 @@ class MBAScraper:
         async with async_playwright() as p:
             # V19.6: Pure Chromium + Natural Navigation (Final Production)
             print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable Target)...")
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-infobars',
+                    '--window-position=0,0',
+                    '--ignore-certifcate-errors',
+                    '--ignore-certifcate-errors-spki-list'
+                ]
+            )
             
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
@@ -116,50 +126,42 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.5: NATURAL NAVIGATION (Click-through)
-                        # Instead of direct navigation, we simulate a student path:
-                        # Home -> (Search/Link) -> Ghost Fetch
-                        home_url = "https://web.sol.du.ac.in/home"
-                        print(f"[CRAWLER][STEALTH]: Navigating to Safe Hub: {home_url}")
-                        await page.goto(home_url, wait_until="domcontentloaded", timeout=120000)
-                        await asyncio.sleep(random.uniform(3, 6))
-
-                        # Potential click-through to mimic interaction if needed
-                        # But Ghost Fetch from Home is usually enough if session is warm
+                        # V25.0: Frame-Breaker Logic using the EXISTING page
+                        print("[CRAWLER]: Priming session on Info Page...")
+                        await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="networkidle", timeout=60000)
+                        await asyncio.sleep(5)
                         
-                        print("[CRAWLER][STEALTH]: Executing Ghost Fetch for vcs.php...")
-                        vcs_content = await page.evaluate("""async () => {
-                            try {
-                                const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
-                                    credentials: 'include',
-                                    headers: {
-                                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                                         'Accept-Language': 'en-US,en;q=0.5',
-                                         'Referer': 'https://web.sol.du.ac.in/home'
-                                     }
-                                });
-                                if (!response.ok) return `FETCH_ERROR_${response.status}`;
-                                return await response.text();
-                            } catch (e) {
-                                return `FETCH_EXCEPTION_${e.message}`;
-                            }
-                        }""")
-                        
-                        if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
-                            print(f"[CRAWLER][STEALTH][WARNING]: Ghost Fetch failed ({vcs_content}). Trying Direct Navigation...")
-                            # Ultimate Fallback: Navigate directly to the vcs.php URL
+                        try:
+                            vcs_frame = None
+                            for frame in page.frames:
+                                if "vcs.php" in frame.url:
+                                    vcs_frame = frame
+                                    break
+                            
+                            if vcs_frame:
+                                print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {vcs_frame.url}. Extracting content.") # type: ignore
+                                vcs_content = await vcs_frame.content() # type: ignore
+                                
+                                if "403 Forbidden" in vcs_content or "Access Denied" in vcs_content:
+                                    print("[CRAWLER][STEALTH][WARNING]: Frame content is 403. Trying Direct Top-Level Navigation...")
+                                    await page.goto(vcs_frame.url, wait_until="networkidle", timeout=60000) # type: ignore
+                                    await asyncio.sleep(5)
+                                else:
+                                    print("[CRAWLER][STEALTH]: Successfully read frame content via frame.content().")
+                                    await page.evaluate(f"""(html) => {{
+                                        const div = document.createElement('div');
+                                        div.id = 'ghost-vcs-container';
+                                        div.innerHTML = html;
+                                        document.body.appendChild(div);
+                                    }}""", vcs_content)
+                            else:
+                                print("[CRAWLER][STEALTH][WARNING]: No frame found. Trying direct hit.")
+                                await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
+                                await asyncio.sleep(5)
+                        except Exception as e:
+                            print(f"[CRAWLER][STEALTH][ERROR]: Hunter failed: {e}")
                             await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
-                            await asyncio.sleep(5)
-                        else:
-                            # Inject success content
-                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content...")
-                            await page.evaluate(f"""(html) => {{
-                                const div = document.createElement('div');
-                                div.id = 'ghost-vcs-container';
-                                div.innerHTML = html;
-                                document.body.appendChild(div);
-                            }}""", vcs_content)
-                        
+
                         await self.extract_online_classes(page)
                     else:
                         await page.goto(url, wait_until="domcontentloaded", timeout=90000)
@@ -188,7 +190,7 @@ class MBAScraper:
             except Exception:
                 print("[CRAWLER][WARNING]: Table not found immediately. Triggering interaction...")
 
-            # 2. Human-Like Keyboard Scrolling to trigger lazy load
+            # 2. Human-Like Mouse/Keyboard Moves
             await page.mouse.move(random.randint(200, 400), random.randint(200, 400))
             for _ in range(3):
                 await page.keyboard.press("PageDown")
@@ -199,23 +201,7 @@ class MBAScraper:
 
         all_raw_tables = []
         try:
-            # Aggressive Frame Hunting (V23.0)
-            if "online-class-schedule" in page.url:
-                frame_urls = await page.evaluate("""() => {
-                    return Array.from(document.querySelectorAll('iframe, frame')).map(f => f.src);
-                }""")
-                for furl in frame_urls:
-                    if "vcs.php" in furl:
-                        print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {furl}. Navigating top-level.")
-                        await page.goto(furl, wait_until="networkidle", timeout=60000)
-                        await asyncio.sleep(5)
-                        break
-
-            # V24.0: DIAGNOSTIC LOGGING
-            print(f"[CRAWLER][DIAGNOSTIC]: Page Title: {await page.title()}")
-            content_snippet = await page.content()
-            print(f"[CRAWLER][DIAGNOSTIC]: Content Snippet (first 1000): {content_snippet[:1000]}")
-            
+            # V25.1: Final Production Extraction
             contexts_to_scan = [page] + page.frames
             print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
             
