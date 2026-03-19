@@ -1,0 +1,30 @@
+name: Scrape MBA Class Schedule
+on:
+  schedule:
+    - cron: '0 * * * *' # Every hour
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f mba_scraper/requirements.txt ]; then pip install -r mba_scraper/requirements.txt; fi
+          playwright install chromium --with-deps
+          
+      - name: Run Scraper
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
+        run: |
+          if [ -f scraper.py ]; then python scraper.py; elif [ -f mba_scraper/scraper.py ]; then python mba_scraper/scraper.py; fi
