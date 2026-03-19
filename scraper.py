@@ -125,34 +125,28 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V33.0: GHOST FETCH PROTOCOL (Ultimate Bypass)
-                        print("[CRAWLER]: Initiating GHOST FETCH Protocol for Schedule...")
+                        # V34.0: CONTEXT-LEVEL GHOST FETCH (Playwright Engine)
+                        print("[CRAWLER]: Initiating CONTEXT-LEVEL GHOST FETCH for Schedule...")
                         
                         try:
-                            # 1. Warm up the session on the main trusted site
+                            # 1. Warm up the context session (cookies/headers)
                             print("[CRAWLER][GHOST]: Priming session on sol.du.ac.in...")
                             await page.goto("https://sol.du.ac.in/home.php", wait_until="networkidle", timeout=60000)
                             await asyncio.sleep(5)
                             
-                            # 2. GHOST FETCH: Run fetch() FROM INSIDE the authenticated browser context
-                            # This bypasses Cloudflare/WAF because it looks like a legitimate AJAX call from a trusted page.
-                            print("[CRAWLER][GHOST]: Executing In-Browser Fetch to vcs.php...")
-                            html_content = await page.evaluate("""async () => {
-                                try {
-                                    const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
-                                        headers: {
-                                            'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule'
-                                        }
-                                    });
-                                    if (!response.ok) return `GHOST_ERROR: ${response.status}`;
-                                    return await response.text();
-                                } catch (e) {
-                                    return `GHOST_FETCH_FAILED: ${e.message}`;
+                            # 2. GHOST FETCH: Use context.request to bypass browser-side CORS and 'Forbidden Header' rules.
+                            # Playwright's API Request context is NOT restricted by browser-side security but USES the same session.
+                            print("[CRAWLER][GHOST]: Executing Context-Level Request to vcs.php...")
+                            response = await context.request.get(
+                                "https://web.sol.du.ac.in/my/team_schedules/vcs.php",
+                                headers={
+                                    "Referer": "https://web.sol.du.ac.in/info/online-class-schedule"
                                 }
-                            }""")
+                            )
                             
-                            if html_content and "GHOST_ERROR" not in html_content and "GHOST_FETCH_FAILED" not in html_content:
+                            if response.ok:
                                 print("[CRAWLER][GHOST]: Fetch SUCCESS. Parsing content.")
+                                html_content = await response.text()
                                 # We need a temporary page to parse the HTML and find the table
                                 ghost_page = await context.new_page()
                                 await ghost_page.set_content(html_content)
@@ -160,7 +154,7 @@ class MBAScraper:
                                 await ghost_page.close()
                                 return
                             else:
-                                print(f"[CRAWLER][GHOST][WARNING]: Ghost fetch failed: {html_content}. Falling back to click flow.")
+                                print(f"[CRAWLER][GHOST][WARNING]: Ghost fetch failed with status {response.status}. Falling back to click flow.")
                         except Exception as e:
                             print(f"[CRAWLER][GHOST][ERROR]: Ghost protocol failed: {e}. Falling back to click flow.")
 
