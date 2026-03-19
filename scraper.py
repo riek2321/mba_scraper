@@ -199,21 +199,36 @@ class MBAScraper:
 
         all_raw_tables = []
         try:
-            # V15.0: Extract from current page AND any frames
+            # Aggressive Frame Hunting (V23.0)
+            # If we are on the info page, look for the vcs iframe
+            if "online-class-schedule" in page.url:
+                frame_urls = await page.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('iframe, frame')).map(f => f.src);
+                }""")
+                for furl in frame_urls:
+                    if "vcs.php" in furl:
+                        print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {furl}. Navigating top-level to bypass cross-origin block.")
+                        await page.goto(furl, wait_until="networkidle", timeout=60000)
+                        await asyncio.sleep(5)
+                        break
+
             contexts_to_scan = [page] + page.frames
             print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
             
             for ctx in contexts_to_scan:
                 try:
+                    # Check if context is accessible
                     tables_data = await ctx.evaluate("""() => {
-                        return Array.from(document.querySelectorAll('table')).map(table => {
-                            return Array.from(table.querySelectorAll('tr')).map(tr => 
-                                Array.from(tr.querySelectorAll('td, th')).map(cell => {
-                                    const a = cell.querySelector('a');
-                                    return { text: cell.innerText.trim(), href: a ? a.href : null };
-                                })
-                            );
-                        });
+                        try {
+                            return Array.from(document.querySelectorAll('table')).map(table => {
+                                return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                    Array.from(tr.querySelectorAll('td, th')).map(cell => {
+                                        const a = cell.querySelector('a');
+                                        return { text: cell.innerText.trim(), href: a ? a.href : null };
+                                    })
+                                );
+                            });
+                        } catch (e) { return null; }
                     }""")
                     if isinstance(tables_data, list):
                         for t in tables_data:
