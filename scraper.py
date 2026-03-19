@@ -310,66 +310,28 @@ class MBAScraper:
             return self.notices # v16.0: Fix NoneType error in main.py
 
     async def extract_online_classes(self, page):
-        """V36.0: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
+        """V37.0: FRAME-OBJECT EXTRACTION (No re-navigation, reads live iframe DOMs)"""
         print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
         
         try:
-            # 1. IFRAME DETECTION: Get all iframe srcs from the page
-            raw_srcs = await page.evaluate("""() => 
-                Array.from(document.querySelectorAll('iframe')).map(f => {
-                    try { return f.src; } catch(e) { return null; }
-                }).filter(src => src !== null)
-            """)
-            iframe_srcs = list(raw_srcs) if isinstance(raw_srcs, list) else []
-            print(f"[CRAWLER][IFRAME]: Found {len(iframe_srcs)} iframes.")
+            # V37.0 KEY INSIGHT: Don't navigate to vcs.php — it's already loaded as a
+            # frame inside the page. Read it directly from the frame object.
+            # This avoids WAF re-checking since no new HTTP request is made.
             
-            # 2. TARGET SELECTION: Find vcs.php iframe specifically
-            vcs_url = next((s for s in iframe_srcs if 'vcs' in s.lower() or 'team_schedules' in s.lower()), None)
-            
-            target_ctx = page
-            vcs_page = None
-            
-            if vcs_url:
-                print(f"[CRAWLER][IFRAME]: Direct Hit! Navigating to: {vcs_url}")
-                try:
-                    # Open vcs_url as a new page WITH the parent page's referer to bypass WAF
-                    vcs_page = await page.context.new_page()
-                    await vcs_page.goto(vcs_url, 
-                        wait_until="networkidle", 
-                        timeout=60000,
-                        referer="https://web.sol.du.ac.in/info/online-class-schedule"
-                    )
-                    await asyncio.sleep(5)
-                    target_ctx = vcs_page
-                except Exception as e:
-                    print(f"[CRAWLER][IFRAME][ERROR]: Failed to navigate into iframe: {e}. Falling back to page scan.")
-                    target_ctx = page
-            else:
-                print("[CRAWLER][IFRAME]: No vcs iframe found, scanning all available frames...")
-                target_ctx = page
-
-            # 3. EXTRACTION: Now extract tables from target_ctx
             all_raw_tables = []
-            
-            # Start with the targeted context
-            contexts_to_scan = [target_ctx]
-            
-            # Add frames if target_ctx is a Page-like object
-            try:
-                # Type safe way to get frames
-                if hasattr(target_ctx, "frames"):
-                    # Use a temporary variable to help the type checker
-                    frames_list = getattr(target_ctx, "frames")
-                    if isinstance(frames_list, list):
-                        for f in frames_list:
-                            contexts_to_scan.append(f)
-            except Exception: pass
-            
-            print(f"[CRAWLER]: Accessing {len(contexts_to_scan)} contexts for table extraction.")
-            
+
+            # Build list of all contexts: main page + every child frame
+            contexts_to_scan = [page] + list(page.frames)
+            print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
+
+            # Log frame URLs for diagnostics
+            for f in page.frames:
+                try:
+                    print(f"[CRAWLER][FRAME]: {f.url}")
+                except Exception: pass
+
             for ctx in contexts_to_scan:
                 try:
-                    # Optimized JS for row-level cell extraction
                     tables_data = await ctx.evaluate("""() => {
                         try {
                             const found_tables = document.querySelectorAll('table');
@@ -384,18 +346,49 @@ class MBAScraper:
                         } catch (e) { return null; }
                     }""")
                     if isinstance(tables_data, list):
-                        for t in tables_data: all_raw_tables.append(t)
-                except Exception: continue
+                        for t in tables_data:
+                            all_raw_tables.append(t)
+                except Exception:
+                    continue
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
-            
-            # Close the temporary iframe page if created
-            if vcs_page is not None:
-                try:
-                    await getattr(vcs_page, "close")()
-                except Exception: pass
-            
-            # V26.4: CRITICAL CONTENT LOGGING
+
+            # V37.0: If still 0, wait longer and retry — vcs.php may load slowly inside iframe
+            if len(all_raw_tables) == 0:
+                print("[CRAWLER][RETRY]: No tables yet. Waiting 15s for iframe to fully load...")
+                await asyncio.sleep(15)
+                # Scroll inside each frame to trigger lazy loading
+                for ctx in contexts_to_scan:
+                    try:
+                        await ctx.evaluate("window.scrollBy(0, 500)")
+                    except Exception: pass
+                await asyncio.sleep(5)
+
+                # Re-scan after wait
+                all_raw_tables = []
+                contexts_to_scan = [page] + list(page.frames)
+                for ctx in contexts_to_scan:
+                    try:
+                        tables_data = await ctx.evaluate("""() => {
+                            try {
+                                return Array.from(document.querySelectorAll('table')).map(table => {
+                                    return Array.from(table.querySelectorAll('tr')).map(tr => 
+                                        Array.from(tr.querySelectorAll('td, th')).map(cell => {
+                                            const a = cell.querySelector('a');
+                                            return { text: cell.innerText.trim(), href: a ? a.href : null };
+                                        })
+                                    );
+                                });
+                            } catch (e) { return null; }
+                        }""")
+                        if isinstance(tables_data, list):
+                            for t in tables_data:
+                                all_raw_tables.append(t)
+                    except Exception:
+                        continue
+                print(f"[CRAWLER][RETRY]: Table count after wait: {len(all_raw_tables)}")
+
+            # Diagnostics if still empty
             if len(all_raw_tables) == 0:
                 print(f"[CRAWLER][DIAGNOSTIC]: Page URL: {page.url}")
                 page_content = await page.content()
