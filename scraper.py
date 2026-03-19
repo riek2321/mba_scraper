@@ -402,6 +402,13 @@ class MBAScraper:
 
     def extract_semester_logic(self, text: str) -> str:
         if not text: return "0"
+        
+        # V18.7: Detect multi-semester ranges or lists (e.g. I-IV, 1-4)
+        if re.search(r'\b(?:Sem(?:ester)?|SEM\.?)\s*[I1V][ -]+[I4V]\b', text, re.I) or \
+           re.search(r'I, II, III, IV', text, re.I) or \
+           re.search(r'1, 2, 3, 4', text, re.I):
+            return "0"
+
         sem_match = re.search(r'\bSem(?:ester)?\s*[-: ]*\s*([1-4]|I{1,3}|IV)\b', text, re.I)
         if sem_match: 
             val = sem_match.group(1).upper()
