@@ -178,7 +178,7 @@ class MBAScraper:
             print(f"[CRAWLER][CFFI][ERROR]: {e}")
             return []
 
-    async def run(self, days_back: int = 15, targets: Optional[List[str]] = None):
+    async def run(self, days_back: int = 15, targets: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
         self.days_back = days_back
         async with async_playwright() as p:
@@ -272,7 +272,7 @@ class MBAScraper:
                                     await self.extract_online_classes(api_page)
                                     await api_page.close()
                                     print("[CRAWLER][API]: SUCCESS! Data extracted via residential proxy.")
-                                    return
+                                    return self.notices
                                 except Exception as e:
                                     print(f"[CRAWLER][API][ERROR]: Extraction failed: {e}")
 
@@ -281,7 +281,7 @@ class MBAScraper:
                         if cffi_results:
                             self.notices.extend(cffi_results)
                             print(f"[CRAWLER][CFFI]: SUCCESS! Got {len(cffi_results)} classes.")
-                            return
+                            return self.notices
                         
                         print("[CRAWLER][CFFI]: Failed, falling back to Playwright flows...")
 
@@ -318,7 +318,7 @@ class MBAScraper:
                                 await ghost_page.set_content(html_content)
                                 await self.extract_online_classes(ghost_page)
                                 await ghost_page.close()
-                                return
+                                return self.notices
                             else:
                                 print(f"[CRAWLER][GHOST][WARNING]: Ghost fetch failed with status {response.status}. Falling back to click flow.")
                         except Exception as e:
@@ -344,7 +344,7 @@ class MBAScraper:
                             await target_page.wait_for_load_state("load", timeout=60000)
                             await asyncio.sleep(5)
                             await self.extract_online_classes(target_page)
-                            return
+                            return self.notices
                         except Exception as e:
                             print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}.")
                     else:
@@ -360,9 +360,11 @@ class MBAScraper:
                 except Exception as e:
                     print(f"[CRAWLER][ERROR]: Failed to visit {url}: {e}")
 
-            await browser.close()
-            print(f"[JOB]: Scan found {len(self.notices)} possible MBA items.")
-            return self.notices # v16.0: Fix NoneType error in main.py
+            try:
+                await getattr(browser, "close")()
+            except Exception: pass
+            
+        return self.notices
 
     async def extract_online_classes(self, page):
         """V36.0: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
@@ -529,7 +531,7 @@ class MBAScraper:
                         elif is_teams_link:
                             final_link = href
                         
-                        now_utc = datetime.datetime.utcnow()
+                        now_utc = datetime.datetime.now(datetime.timezone.utc)
                         ist_offset = datetime.timedelta(hours=5, minutes=30)
                         current_date_ist = (now_utc + ist_offset).date()
                         item_date_obj = self._normalize_date(str(date_str))
@@ -723,4 +725,20 @@ if __name__ == "__main__":
     # Initialize Notifier (if needed inside MBAScraper, usually it's initialized during run or passed in)
     # For now, we ensure the scraper logic uses these config values.
     
-    asyncio.run(scraper.run())
+    try:
+        # Re-run the scraper and sync results
+        results: list = asyncio.run(scraper.run())
+        if results and isinstance(results, list):
+            print(f"[JOB]: Syncing {len(results)} items to backend...")
+            notifier = Notifier(backend_url, scraper_key)
+            for item in results:
+                try:
+                    success = notifier.sync_to_website(item)
+                    status = "SUCCESS" if success else "FAILED"
+                    print(f"[JOB][SYNC]: {status} | {item['title']}")
+                except Exception as e:
+                    print(f"[JOB][SYNC][ERROR]: {e}")
+        else:
+            print("[JOB]: No new items to sync.")
+    except Exception as e:
+        print(f"[JOB][FATAL]: {e}")
