@@ -39,7 +39,7 @@ class MBAScraper:
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.3060.0"
         self.targets = [
             "https://sol.du.ac.in/home.php",
-            "https://web.sol.du.ac.in/info/online-class-schedule", # Visit Parent instead of Direct vcs.php
+            "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
             "https://sol.du.ac.in/all-notices.php"
         ]
 
@@ -121,37 +121,35 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V19.0: GOLDEN LOGIC RESTORED (Stable Direct Navigation)
-                        # Instead of 'Ghost Fetch' which is flagged, we use natural progression.
+                        # V19.1: FAST-PATH DIRECT VCS (Anti-Timeout)
+                        # Instead of the heavy wrapper, we visit vcs.php directly but with 
+                        # intense session priming and Referer spoofing.
                         home_url = "https://web.sol.du.ac.in/home"
                         support_url = "https://web.sol.du.ac.in/info/student-support"
-                        target_url = "https://web.sol.du.ac.in/info/online-class-schedule"
+                        wrapper_url = "https://web.sol.du.ac.in/info/online-class-schedule"
+                        target_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
                         
                         print(f"[CRAWLER][STEALTH]: Priming Session (Home): {home_url}")
                         await page.goto(home_url, wait_until="networkidle", timeout=60000)
-                        await asyncio.sleep(random.uniform(3, 6))
+                        await asyncio.sleep(2)
                         
-                        # Add Human Interaction
-                        print("[CRAWLER][STEALTH]: Simulating Human Scroll on Home...")
-                        await page.mouse.wheel(0, 500)
-                        await asyncio.sleep(1)
-                        await page.mouse.wheel(0, -300)
-                        
-                        print(f"[CRAWLER][STEALTH]: Navigating to Target with Referer: {target_url}")
-                        await page.goto(target_url, wait_until="load", timeout=90000, referer=home_url)
-                        
-                        print("[CRAWLER][STEALTH]: Final Stealth Interaction (Wait for Dynamic Table)...")
-                        # Real human wait and small movements
-                        for _ in range(3):
-                            await page.mouse.move(random.randint(100, 700), random.randint(100, 500))
-                            await asyncio.sleep(random.uniform(2, 4))
-                        
-                        # Wait for the table element to appear (vcs_table or generic table)
+                        print(f"[CRAWLER][STEALTH]: Priming Session (Support): {support_url}")
+                        await page.goto(support_url, wait_until="domcontentloaded", timeout=60000)
+                        await asyncio.sleep(2)
+
+                        print(f"[CRAWLER][STEALTH]: Navigating to Direct Data with Referer: {target_url}")
                         try:
-                            await page.wait_for_selector(".table-striped", timeout=30000)
-                            print("[CRAWLER][GOLDEN]: Table detected successfully!")
-                        except Exception:
-                            print("[CRAWLER][WARNING]: Table not found after wait. Attempting extraction anyway.")
+                            # We use the wrapper URL as the Referer to make it look legitimate
+                            await page.goto(target_url, wait_until="load", timeout=90000, referer=wrapper_url)
+                        except Exception as e:
+                            print(f"[CRAWLER][STEALTH][WARNING]: Direct attempt failed: {e}. Trying via Wrapper jump...")
+                            await page.goto(wrapper_url, wait_until="domcontentloaded", timeout=90000, referer=support_url)
+                            await asyncio.sleep(5)
+                            await page.goto(target_url, wait_until="load", timeout=90000, referer=wrapper_url)
+                        
+                        print("[CRAWLER][STEALTH]: Final Stealth Interaction...")
+                        await page.mouse.wheel(0, 500)
+                        await asyncio.sleep(3)
                         
                         await self.extract_online_classes(page)
                     else:
