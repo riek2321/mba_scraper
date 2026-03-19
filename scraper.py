@@ -203,14 +203,8 @@ class MBAScraper:
             
             for ctx in contexts_to_scan:
                 try:
-                    # v16.0: Frame-level wait
-                    try: await ctx.wait_for_selector("table", timeout=5000)
-                    except: pass
-                    
                     tables_data = await ctx.evaluate("""() => {
-                        const tables = Array.from(document.querySelectorAll('table'));
-                        if (tables.length === 0) return null;
-                        return tables.map(table => {
+                        return Array.from(document.querySelectorAll('table')).map(table => {
                             return Array.from(table.querySelectorAll('tr')).map(tr => 
                                 Array.from(tr.querySelectorAll('td, th')).map(cell => {
                                     const a = cell.querySelector('a');
@@ -220,95 +214,100 @@ class MBAScraper:
                         });
                     }""")
                     if isinstance(tables_data, list):
-                        for t in tables_data: # type: ignore
+                        for t in tables_data:
                             all_raw_tables.append(t)
                 except Exception: continue
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
             
-            # v16.0: HTML Diagnostics if 0 tables
-            if not all_raw_tables:
-                print("[CRAWLER][DIAGNOSTIC]: No tables found. Source snippet:")
-                try:
-                    html = await page.content()
-                    print(html[:500].replace('\n', ' '))
-                except: pass
-
-            if isinstance(all_raw_tables, list):
-                for rows in all_raw_tables: # type: ignore
-                    date_str = None
-                    for row in rows: # type: ignore
-                        combined_text = " ".join([c['text'] for c in row]) # type: ignore
-                        if 'date:' in combined_text.lower():
-                            date_str = combined_text.split(':')[1].strip()
+            for rows in all_raw_tables:
+                # 1. FIND DATE FOR THIS TABLE
+                date_str = None
+                for row in rows:
+                    combined = " ".join([c['text'] for c in row]) # type: ignore
+                    # Case insensitive date search
+                    if 'date:' in combined.lower():
+                        # Extract 10-character date like 19-03-2026
+                        match = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', combined)
+                        if match:
+                            date_str = match.group(1)
+                            break
+                        else:
+                            # Fallback to colon split
+                            parts = combined.split(':')
+                            if len(parts) > 1:
+                                date_str = parts[1].strip()[:10] # type: ignore
+                                break
+                
+                if not date_str:
+                    print("[CRAWLER][DEBUG]: Table skipped, no date found.")
+                    continue
+                    
+                # 2. EXTRACT CLASSES
+                for cells in rows: 
+                    if len(cells) < 4: continue
+                    row_text = " ".join([c['text'] for c in cells]) # type: ignore
+                    if not any(kw.lower() in row_text.lower() for kw in self.keywords):
+                        continue
+                        
+                    course_text = cells[0]['text'] # type: ignore
+                    sem_text = cells[1]['text'] # type: ignore
+                    subject_text = cells[2]['text'] # type: ignore
+                    
+                    time_text = ""
+                    for c in cells: # type: ignore
+                        if re.search(r'\d{1,2}:\d{2}', c['text']):
+                            time_text = c['text']
                             break
                     
-                    if not date_str: continue
-                    
-                    for cells in rows: # type: ignore
-                        if len(cells) < 4: continue # type: ignore
-                        row_text = " ".join([c['text'] for c in cells]) # type: ignore
-                        if not any(kw.lower() in row_text.lower() for kw in self.keywords):
-                            continue
-                            
-                        course_text = cells[0]['text'] # type: ignore
-                        sem_text = cells[1]['text'] # type: ignore
-                        subject_text = cells[2]['text'] # type: ignore
+                    href = None
+                    link_data = None
+                    for c in reversed(cells): # type: ignore
+                        if c['href'] and ('teams.microsoft.com' in c['href'] or 'join' in c['text'].lower()): # type: ignore
+                            href = c['href']
+                            link_data = c
+                            break
                         
-                        time_text = ""
-                        for c in cells: # type: ignore
-                            if re.search(r'\d{1,2}:\d{2}', c['text']):
-                                time_text = c['text']
-                                break
+                    is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
+                    if is_mba_course:
+                        semester = self.extract_semester_logic(sem_text if sem_text else course_text)
+                        if semester == "0": semester = self.extract_semester_logic(course_text)
                         
-                        href = None
-                        link_data = None
-                        for c in reversed(cells): # type: ignore
-                            if c['href'] and ('teams.microsoft.com' in c['href'] or 'join' in c['text'].lower()): # type: ignore
-                                href = c['href']
-                                link_data = c
-                                break
-                            
-                        is_mba_course = any(kw.lower() in course_text.lower() for kw in self.keywords)
-                        if is_mba_course:
-                            semester = self.extract_semester_logic(sem_text if sem_text else course_text)
-                            if semester == "0": semester = self.extract_semester_logic(course_text)
-                            
-                            title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
-                            link_text = link_data.get('text', '').strip() if link_data else "" # type: ignore
+                        title = f"[{date_str}] {course_text} Sem {semester}: {subject_text} ({time_text})"
+                        link_text = link_data.get('text', '').strip() if link_data else "" # type: ignore
+                        final_link = href
+                        is_teams_link = href and "teams.microsoft.com" in href # type: ignore
+                        
+                        is_pending = (
+                            not href or 
+                            ("online-class-schedule" in href and not is_teams_link) or # type: ignore
+                            "..." in href or # type: ignore
+                            ("available soon" in link_text.lower() and not is_teams_link)
+                        )
+                        
+                        if is_pending:
+                            final_link = "#pending"
+                        elif is_teams_link:
                             final_link = href
-                            is_teams_link = href and "teams.microsoft.com" in href # type: ignore
-                            
-                            is_pending = (
-                                not href or 
-                                ("online-class-schedule" in href and not is_teams_link) or # type: ignore
-                                "..." in href or # type: ignore
-                                ("available soon" in link_text.lower() and not is_teams_link)
-                            )
-                            
-                            if is_pending:
-                                final_link = "#pending"
-                            elif is_teams_link:
-                                final_link = href
-                            
-                            now_utc = datetime.datetime.utcnow()
-                            ist_offset = datetime.timedelta(hours=5, minutes=30)
-                            current_date_ist = (now_utc + ist_offset).date()
-                            item_date_obj = self._normalize_date(str(date_str))
-                            
-                            if item_date_obj and item_date_obj < current_date_ist: continue
+                        
+                        now_utc = datetime.datetime.utcnow()
+                        ist_offset = datetime.timedelta(hours=5, minutes=30)
+                        current_date_ist = (now_utc + ist_offset).date()
+                        item_date_obj = self._normalize_date(str(date_str))
+                        
+                        if item_date_obj and item_date_obj < current_date_ist: continue
 
-                            description = f"MBA Live Class: {subject_text}. Time: {time_text}."
+                        description = f"MBA Live Class: {subject_text}. Time: {time_text}."
 
-                            self.notices.append({
-                                "title": title.strip(),
-                                "link": final_link,
-                                "semester": semester,
-                                "date": self.parse_date(str(date_str)),
-                                "class_time": time_text.strip(),
-                                "description": description
-                            })
-                            print(f"[CRAWLER][CLASS FOUND]: {title}")
+                        self.notices.append({
+                            "title": title.strip(),
+                            "link": final_link,
+                            "semester": semester,
+                            "date": self.parse_date(str(date_str)),
+                            "class_time": time_text.strip(),
+                            "description": description
+                        })
+                        print(f"[CRAWLER][CLASS FOUND]: {title}")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Online classes parsing failed: {e}")
 
@@ -419,13 +418,14 @@ class MBAScraper:
         if any(re.search(p, text, re.I) for p in multi_patterns):
             return "0"
 
-        sem_match = re.search(r'\bSem(?:ester)?\s*[-: ]*\s*([1-4]|I{1,3}|IV)\b', text, re.I)
-        if sem_match: 
-            val = sem_match.group(1).upper()
-            mapping = {'I': '1', 'II': '2', 'III': '3', 'IV': '4'}
-            return mapping.get(val, val)
-        ordinal_match = re.search(r'\b([1-4])(?:st|nd|rd|th)?\s*SEM\b', text, re.I)
-        if ordinal_match: return ordinal_match.group(1)
+        # v20.0: More robust semester extraction
+        # Try finding standard 1-4 with sem suffix
+        ordinal_match = re.search(r'\b([1-4])(?:st|nd|rd|th)?\s*(?:SEM|Semester)?\b', text, re.I)
+        if ordinal_match: return str(ordinal_match.group(1)) # Changed to str to match return type
+        
+        # Try finding bare number if the text is short (likely a sem column)
+        bare_match = re.search(r'\b([1-4])\b', text)
+        if bare_match: return str(bare_match.group(1)) # Changed to str to match return type
         if "mba" in text.lower():
             if re.search(r'\b(4|IV|Fourth)\b', text, re.I): return "4"
             if re.search(r'\b(3|III|Third)\b', text, re.I): return "3"
