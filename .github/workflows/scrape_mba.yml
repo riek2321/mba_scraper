@@ -43,4 +43,5 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add keep_alive.txt
           git commit -m "Auto-keep-alive: $(date)" || echo "No changes to commit"
+          git pull --rebase
           git push
