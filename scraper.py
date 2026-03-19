@@ -47,13 +47,13 @@ class MBAScraper:
         """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
         self.days_back = days_back
         async with async_playwright() as p:
-            # V19.2: Browser fallback - Prioritize Firefox for Render stealth, revert to Chromium for local
+            # V17.6 Compatibility: Revert to Chromium as primary stable engine
             try:
-                print("[CRAWLER]: Launching Firefox Engine...")
-                browser = await p.firefox.launch(headless=True)
-            except Exception:
-                print(f"[CRAWLER][WARNING]: Firefox missing or unsupported. Reverting to Chromium...")
+                print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable)...")
                 browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            except Exception:
+                print(f"[CRAWLER][WARNING]: Chromium failed. Attempting Firefox fallback...")
+                browser = await p.firefox.launch(headless=True)
             
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
@@ -122,35 +122,46 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V19.1: FAST-PATH DIRECT VCS (Anti-Timeout)
-                        # Instead of the heavy wrapper, we visit vcs.php directly but with 
-                        # intense session priming and Referer spoofing.
+                        # V17.6: IN-BROWSER FETCH (The "Ghost" Protocol)
+                        # Instead of navigating to the schedule page (WAF target),
+                        # we stay on a "safe" page (Home) and use the browser's authenticated
+                        # session to fetch the vcs.php content via Javascript.
                         home_url = "https://web.sol.du.ac.in/home"
-                        support_url = "https://web.sol.du.ac.in/info/student-support"
-                        wrapper_url = "https://web.sol.du.ac.in/info/online-class-schedule"
-                        target_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
+                        print(f"[CRAWLER][STEALTH]: Navigating to Safe Hub: {home_url}")
                         
-                        print(f"[CRAWLER][STEALTH]: Priming Session (Home): {home_url}")
-                        await page.goto(home_url, wait_until="networkidle", timeout=60000)
-                        await asyncio.sleep(2)
+                        await page.goto(home_url, wait_until="domcontentloaded", timeout=120000)
+                        await asyncio.sleep(random.uniform(5, 10))
                         
-                        print(f"[CRAWLER][STEALTH]: Priming Session (Support): {support_url}")
-                        await page.goto(support_url, wait_until="domcontentloaded", timeout=60000)
-                        await asyncio.sleep(2)
-
-                        print(f"[CRAWLER][STEALTH]: Navigating to Direct Data with Referer: {target_url}")
-                        try:
-                            # We use the wrapper URL as the Referer to make it look legitimate
-                            await page.goto(target_url, wait_until="load", timeout=90000, referer=wrapper_url)
-                        except Exception as e:
-                            print(f"[CRAWLER][STEALTH][WARNING]: Direct attempt failed: {e}. Trying via Wrapper jump...")
-                            await page.goto(wrapper_url, wait_until="domcontentloaded", timeout=90000, referer=support_url)
-                            await asyncio.sleep(5)
-                            await page.goto(target_url, wait_until="load", timeout=90000, referer=wrapper_url)
+                        print("[CRAWLER][STEALTH]: Executing Ghost Fetch for vcs.php...")
+                        vcs_content = await page.evaluate("""async () => {
+                            try {
+                                const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
+                                    headers: {
+                                        'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    }
+                                });
+                                if (!response.ok) return `FETCH_ERROR_${response.status}`;
+                                return await response.text();
+                            } catch (e) {
+                                return `FETCH_EXCEPTION_${e.message}`;
+                            }
+                        }""")
                         
-                        print("[CRAWLER][STEALTH]: Final Stealth Interaction...")
-                        await page.mouse.wheel(0, 500)
-                        await asyncio.sleep(3)
+                        if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
+                            print(f"[CRAWLER][STEALTH][ERROR]: Ghost Fetch failed: {vcs_content}")
+                            # Final fallback: Attempt direct navigation if fetch failed
+                            print("[CRAWLER][STEALTH]: Final attempt: Direct Navigation...")
+                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=60000)
+                        else:
+                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content for parsing...")
+                            # Inject the fetched HTML into a temporary container on the current page for parsing
+                            await page.evaluate(f"""(html) => {{
+                                const div = document.createElement('div');
+                                div.id = 'ghost-vcs-container';
+                                div.innerHTML = html;
+                                document.body.appendChild(div);
+                            }}""", vcs_content)
                         
                         await self.extract_online_classes(page)
                     else:
