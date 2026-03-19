@@ -354,12 +354,16 @@ class MBAScraper:
                     semester = self.extract_semester_logic(text)
                     
                     print(f"[CRAWLER][LEGACY FOUND]: {text.strip()} (Sem {semester})")
+                    description = f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA information."
+                    if "online class" in text.lower() or "schedule" in text.lower():
+                        description = f"MBA Live Class: {text.strip()}"
+
                     self.notices.append({
                         "title": text.strip(),
                         "link": href,
                         "semester": semester,
                         "date": notice_date.strftime("%Y-%m-%d"),
-                        "description": f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA information."
+                        "description": description
                     })
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Legacy notices parsing failed: {e}")
@@ -381,12 +385,16 @@ class MBAScraper:
                         if any(n['link'] == href for n in self.notices): continue
                         semester = self.extract_semester_logic(text)
                         
+                        description = "General MBA information."
+                        if "online class" in text.lower() or "schedule" in text.lower():
+                            description = f"MBA Live Class: {text.strip()}"
+
                         self.notices.append({
                             "title": text.strip(),
                             "link": href,
                             "semester": semester,
                             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "description": "General MBA information."
+                            "description": description
                         })
                         print(f"[CRAWLER][FOUND]: {text.strip()}")
                 except Exception: continue
