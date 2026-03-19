@@ -92,12 +92,12 @@ class MBAScraper:
                 # Step 0: Main portal
                 print("[CRAWLER][PRIMER]: Visiting Main Portal...")
                 await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(random.uniform(3, 6))
+                await asyncio.sleep(2)
 
                 # Step 1: Subdomain Root
                 print("[CRAWLER][PRIMER]: Visiting Subdomain Root...")
-                await page.goto("https://web.sol.du.ac.in/home", wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(random.uniform(3, 6))
+                await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(2)
                 
                 # Step 2: Intermediate page (Student Support)
                 print("[CRAWLER][PRIMER]: Visiting Student Support...")
@@ -361,37 +361,44 @@ class MBAScraper:
             print(f"[CRAWLER][ERROR]: Legacy notices parsing failed: {e}")
 
     async def extract_mba_content(self, page):
-        """General link extraction matching MBA keywords"""
+        """v19.3: Turbo Link Extraction (Single Page Evaluate)"""
         try:
-            links = await page.locator("a").all()
-            for link in links:
-                try:
-                    text = await link.inner_text()
-                    href = await link.get_attribute("href")
-                    if not href or not text: continue
+            # Get all links and texts in one single JS call to avoid 100s of 'awaits'
+            link_data = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('a')).map(a => ({
+                    text: a.innerText,
+                    href: a.href
+                }))
+            """)
+            
+            for item in link_data:
+                text = item.get('text', '').strip()
+                href = item.get('href', '')
+                if not href or not text: continue
+                
+                if any(kw.lower() in text.lower() for kw in self.keywords):
+                    # Ensure absolute URL
+                    if not href.startswith("http"):
+                        href = "https://web.sol.du.ac.in" + href if href.startswith("/") else self.base_url + href
+                        
+                    if any(n['link'] == href for n in self.notices): continue
+                    semester = self.extract_semester_logic(text)
                     
-                    if any(kw.lower() in text.lower() for kw in self.keywords):
-                        if not href.startswith("http"):
-                            href = "https://web.sol.du.ac.in" + href if href.startswith("/") else self.base_url + href
-                        
-                        if any(n['link'] == href for n in self.notices): continue
-                        semester = self.extract_semester_logic(text)
-                        
-                        description = "General MBA information."
-                        is_class_related = any(kw.lower() in text.lower() for kw in ["online class", "live class", "vcs", "schedule", "date sheet", "datesheet"])
-                        if is_class_related:
-                            description = f"MBA Live Class: {text.strip()}"
+                    description = "General MBA information."
+                    is_class_related = any(kw.lower() in text.lower() for kw in ["online class", "live class", "vcs", "schedule", "date sheet", "datesheet"])
+                    if is_class_related:
+                        description = f"MBA Live Class: {text}"
 
-                        self.notices.append({
-                            "title": text.strip(),
-                            "link": href,
-                            "semester": semester,
-                            "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "description": description
-                        })
-                        print(f"[CRAWLER][FOUND]: {text.strip()}")
-                except Exception: continue
-        except Exception: pass
+                    self.notices.append({
+                        "title": text,
+                        "link": href,
+                        "semester": semester,
+                        "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                        "description": description
+                    })
+                    print(f"[CRAWLER][FOUND]: {text}")
+        except Exception as e:
+            print(f"[CRAWLER][ERROR]: Turbo extraction failed: {e}")
 
     def extract_semester_logic(self, text: str) -> str:
         if not text: return "0"
