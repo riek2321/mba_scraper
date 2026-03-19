@@ -47,13 +47,9 @@ class MBAScraper:
         """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
         self.days_back = days_back
         async with async_playwright() as p:
-            # V19.5: Chromium + Authenticated Ghost Fetch (Stable 17.6 Engine)
-            try:
-                print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable)...")
-                browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
-            except Exception:
-                print(f"[CRAWLER][WARNING]: Chromium failed. Attempting Firefox fallback...")
-                browser = await p.firefox.launch(headless=True)
+            # V19.6: Pure Chromium + Natural Navigation (Final Production)
+            print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable Target)...")
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
             
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
@@ -62,12 +58,10 @@ class MBAScraper:
                 "Upgrade-Insecure-Requests": "1"
             }
             
-            # v17.0: Randomized Viewport
             viewports = [
                 {'width': 1366, 'height': 768},
                 {'width': 1536, 'height': 864},
-                {'width': 1920, 'height': 1080},
-                {'width': 1440, 'height': 900}
+                {'width': 1920, 'height': 1080}
             ]
             
             context = await browser.new_context(
@@ -77,31 +71,34 @@ class MBAScraper:
             )
             page = await context.new_page()
             
-            # v17.0: STEALTH LAYER
             try:
                 await stealth_async(page)
                 print("[CRAWLER]: Stealth signatures applied.")
             except Exception: pass
 
-            # v17.0: ADVANCED SESSION PRIMER (Warming up the entire domain)
-            print("[CRAWLER]: Priming Multi-Step Session (sol.du.ac.in + web.sol.du.ac.in)")
+            print("[CRAWLER]: Priming NATURAL NAVIGATION Session...")
             try:
                 # Step 0: Main portal
                 print("[CRAWLER][PRIMER]: Visiting Main Portal...")
-                await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
+                await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=120000)
                 await asyncio.sleep(2)
 
-                # Step 1: Subdomain Root
-                print("[CRAWLER][PRIMER]: Visiting Subdomain Root...")
-                await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(2)
+                # Step 1: Subdomain Home
+                print("[CRAWLER][PRIMER]: Visiting Subdomain Home...")
+                await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=120000)
+                await asyncio.sleep(3)
                 
-                # Step 2: Intermediate page (Student Support)
-                print("[CRAWLER][PRIMER]: Visiting Student Support...")
-                await page.goto("https://web.sol.du.ac.in/info/student-support", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(random.uniform(2, 4))
+                # V17.5 Natural Navigation: Click via UI instead of direct jump
+                print("[CRAWLER][PRIMER]: Clicking 'Student Support' (Natural Flow)...")
+                try:
+                    # Look for links that might lead to support/classes
+                    await page.locator("text='Student Support'").first.click(timeout=10000)
+                    await asyncio.sleep(2)
+                except Exception:
+                    # Fallback to direct jump if click fails, but prefer click
+                    await page.goto("https://web.sol.du.ac.in/info/student-support", wait_until="domcontentloaded", timeout=60000)
             except Exception as e: 
-                print(f"[CRAWLER][PRIMER][WARNING]: Primer interrupted: {e}")
+                print(f"[CRAWLER][PRIMER][WARNING]: Natural flow warning: {e}")
 
             # v15.0: REQUEST INTERCEPTION (Bypass 403)
             async def intercept_vcs(route):
@@ -119,15 +116,16 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.6: IN-BROWSER FETCH (The "Ghost" Protocol)
-                        # Instead of navigating to the schedule page (WAF target),
-                        # we stay on a "safe" page (Home) and use the browser's authenticated
-                        # session to fetch the vcs.php content via Javascript.
+                        # V17.5: NATURAL NAVIGATION (Click-through)
+                        # Instead of direct navigation, we simulate a student path:
+                        # Home -> (Search/Link) -> Ghost Fetch
                         home_url = "https://web.sol.du.ac.in/home"
                         print(f"[CRAWLER][STEALTH]: Navigating to Safe Hub: {home_url}")
-                        
                         await page.goto(home_url, wait_until="domcontentloaded", timeout=120000)
-                        await asyncio.sleep(random.uniform(5, 10))
+                        await asyncio.sleep(random.uniform(3, 6))
+
+                        # Potential click-through to mimic interaction if needed
+                        # But Ghost Fetch from Home is usually enough if session is warm
                         
                         print("[CRAWLER][STEALTH]: Executing Ghost Fetch for vcs.php...")
                         vcs_content = await page.evaluate("""async () => {
@@ -148,12 +146,11 @@ class MBAScraper:
                         
                         if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
                             print(f"[CRAWLER][STEALTH][ERROR]: Ghost Fetch failed: {vcs_content}")
-                            # Final fallback: Attempt direct navigation if fetch failed
-                            print("[CRAWLER][STEALTH]: Final attempt: Direct Navigation...")
-                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=60000)
+                            # V17.5 Fallback: Natural Direct Navigation
+                            print("[CRAWLER][STEALTH]: Final attempt: Natural Direct Navigation...")
+                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=90000)
                         else:
-                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content for parsing...")
-                            # Inject the fetched HTML into a temporary container on the current page for parsing
+                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content...")
                             await page.evaluate(f"""(html) => {{
                                 const div = document.createElement('div');
                                 div.id = 'ghost-vcs-container';
