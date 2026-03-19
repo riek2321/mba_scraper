@@ -29,6 +29,7 @@ except ImportError:
     pass
 
 try:
+    import requests # type: ignore
     from curl_cffi import requests as cffi_requests # type: ignore
     from bs4 import BeautifulSoup # type: ignore
 except ImportError:
@@ -42,11 +43,42 @@ class MBAScraper:
         self.notices = []
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
+        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
             "https://sol.du.ac.in/all-notices.php"
         ]
+
+    async def fetch_via_api(self, url: str) -> Optional[str]:
+        """V50.0: Level 3 Bypass via Scraping API (Residential Proxies)"""
+        if not self.scraper_api_key:
+            return None
+            
+        print(f"[CRAWLER][API]: Attempting residential proxy fetch for {url}...")
+        try:
+            # ScraperAPI format
+            api_url = f"http://api.scraperapi.com?api_key={self.scraper_api_key}&url={url}"
+            # Add render_js=true if hitting the main page, but direct vcs.php might not need it
+            if "vcs.php" not in url:
+                api_url += "&render_js=true"
+                
+            loop = asyncio.get_event_loop()
+            # Fix: provide a clear function for run_in_executor
+            def sync_get(u):
+                return requests.get(u, timeout=60)
+                
+            response = await loop.run_in_executor(None, sync_get, api_url)
+            
+            if response.status_code == 200:
+                print(f"[CRAWLER][API]: Success! Fetched {len(response.text)} chars.")
+                return response.text
+            else:
+                print(f"[CRAWLER][API]: Failed with status {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"[CRAWLER][API][ERROR]: {e}")
+            return None
 
     async def fetch_schedule_cffi(self) -> list:
         """V35.0: TLS Fingerprint Impersonation via curl_cffi"""
@@ -227,7 +259,22 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V35.0: Try TLS impersonation FIRST (curl_cffi)
+                        # V50.0: Level 3 Bypass (Scraping API) - Try FIRST on server
+                        if self.scraper_api_key:
+                            api_html = await self.fetch_via_api(url)
+                            if api_html:
+                                try:
+                                    # Create a temporary page to reuse extraction logic
+                                    api_page = await context.new_page()
+                                    await api_page.set_content(api_html)
+                                    await self.extract_online_classes(api_page)
+                                    await api_page.close()
+                                    print("[CRAWLER][API]: SUCCESS! Data extracted via residential proxy.")
+                                    return
+                                except Exception as e:
+                                    print(f"[CRAWLER][API][ERROR]: Extraction failed: {e}")
+
+                        # V35.0: Try TLS impersonation (Fallback)
                         cffi_results = await self.fetch_schedule_cffi()
                         if cffi_results:
                             self.notices.extend(cffi_results)
