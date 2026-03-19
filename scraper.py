@@ -35,8 +35,8 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        # V19.0: Modern Professional Headers (Microsoft Edge on Windows)
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.3060.0"
+        # V28.0: ULTIMATE STEALTH USER-AGENT (Chrome v131)
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
@@ -145,9 +145,10 @@ class MBAScraper:
                             await page.click(link_selector)
                             print("[CRAWLER][BYPASS]: Clicked. Waiting for Target Page Load...")
                             
-                            # Wait for the target page (Info Page)
-                            await page.wait_for_load_state("networkidle", timeout=60000)
-                            await asyncio.sleep(5) # Give vcs.php time to inject
+                            # Wait for the target page (load state is safer than networkidle here)
+                            print("[CRAWLER][BYPASS]: Waiting for Load state...")
+                            await page.wait_for_load_state("load", timeout=60000)
+                            await asyncio.sleep(10) # Heavy sleep for vcs.php inject
                             
                             # 3. Diagnostic check of final content
                             final_content = await page.content()
