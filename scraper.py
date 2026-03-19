@@ -44,20 +44,21 @@ class MBAScraper:
         ]
 
     async def run(self, days_back: int = 15, targets: Optional[List[str]] = None):
-        """Execute the simplified 3-page targeted scraping job like a 'normal human'"""
+        """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
         self.days_back = days_back
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+            # V19.2: Browser fallback - Prioritize Firefox for Render stealth, revert to Chromium for local
+            try:
+                print("[CRAWLER]: Launching Firefox Engine...")
+                browser = await p.firefox.launch(headless=True)
+            except Exception:
+                print(f"[CRAWLER][WARNING]: Firefox missing or unsupported. Reverting to Chromium...")
+                browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
             
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "Sec-Ch-Ua": '"Microsoft Edge";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
-                "Sec-Ch-Ua-Mobile": "?0",
-                "Sec-Ch-Ua-Platform": '"Windows"',
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
                 "Sec-Fetch-User": "?1",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Upgrade-Insecure-Requests": "1",
@@ -345,7 +346,8 @@ class MBAScraper:
                     
                     print(f"[CRAWLER][LEGACY FOUND]: {text.strip()} (Sem {semester})")
                     description = f"MBA Notification for Semester {semester}" if semester != "0" else "Generic MBA information."
-                    if "online class" in text.lower() or "live class" in text.lower() or "vcs" in text.lower():
+                    is_class_related = any(kw.lower() in text.lower() for kw in ["online class", "live class", "vcs", "schedule", "date sheet", "datesheet"])
+                    if is_class_related:
                         description = f"MBA Live Class: {text.strip()}"
 
                     self.notices.append({
@@ -376,7 +378,8 @@ class MBAScraper:
                         semester = self.extract_semester_logic(text)
                         
                         description = "General MBA information."
-                        if "online class" in text.lower() or "live class" in text.lower() or "vcs" in text.lower():
+                        is_class_related = any(kw.lower() in text.lower() for kw in ["online class", "live class", "vcs", "schedule", "date sheet", "datesheet"])
+                        if is_class_related:
                             description = f"MBA Live Class: {text.strip()}"
 
                         self.notices.append({

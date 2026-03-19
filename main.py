@@ -285,7 +285,9 @@ async def job(targets=None):
         print(f"[JOB]: Finished Scraper Job.")
         
     except Exception as e:
-        print(f"[ERROR]: Job failed: {e}")
+        # v19.2: Handle Unicode in Errors (box characters etc)
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        print(f"[ERROR]: Job failed: {error_msg}")
 
 def keep_alive():
     """Self-ping to prevent Render sleep (Free Tier)"""
