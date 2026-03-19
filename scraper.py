@@ -135,27 +135,30 @@ class MBAScraper:
                             await page.goto("https://sol.du.ac.in/home.php", wait_until="networkidle", timeout=60000)
                             await asyncio.sleep(3)
                             
-                            # 2. Click 'Online Class Schedule' link
+                            # 2. Click 'Online Class Schedule' link and CAPTURE NEW PAGE
                             print("[CRAWLER][BYPASS]: Finding and Clicking 'Online Class Schedule' link...")
-                            # Use a robust selector that finds the link by text
                             link_selector = "a:has-text('Online Class Schedule')"
                             await page.wait_for_selector(link_selector, timeout=20000)
                             
-                            # Click it
-                            await page.click(link_selector)
-                            print("[CRAWLER][BYPASS]: Clicked. Waiting for Target Page Load...")
-                            
-                            # Wait for the target page (load state is safer than networkidle here)
-                            print("[CRAWLER][BYPASS]: Waiting for Load state...")
-                            await page.wait_for_load_state("load", timeout=60000)
+                            # SOL links often open in new tabs
+                            try:
+                                async with context.expect_page(timeout=30000) as new_page_info:
+                                    await page.click(link_selector)
+                                target_page = await new_page_info.value
+                                print("[CRAWLER][BYPASS]: Captured NEW TAB. Switching contexts.")
+                            except:
+                                print("[CRAWLER][BYPASS]: No new tab. Proceeding on current page.")
+                                await page.click(link_selector)
+                                target_page = page
+
+                            print("[CRAWLER][BYPASS]: Waiting for Target Page Load...")
+                            await target_page.wait_for_load_state("load", timeout=60000)
                             await asyncio.sleep(10) # Heavy sleep for vcs.php inject
                             
-                            # 3. Diagnostic check of final content
-                            final_content = await page.content()
-                            if "403 Forbidden" in final_content or "Access Denied" in final_content:
-                                print("[CRAWLER][BYPASS][WARNING]: Target page is still 403. Trying Direct Hit fallback...")
-                                await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
-                                await asyncio.sleep(5)
+                            # Extract from the target page
+                            await self.extract_online_classes(target_page)
+                            return # Avoid falling through to extra extraction on wrong page
+                            
                         except Exception as e:
                             print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}. Falling back to direct hit.")
                             await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
