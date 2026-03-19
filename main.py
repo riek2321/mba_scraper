@@ -35,6 +35,13 @@ def run_health_server():
     server.serve_forever()
 
 async def job(targets=None):
+    # V18.6: Even in targeted scans, ensure legacy fallback is included if seeking classes
+    if targets is not None:
+        if any("online-class-schedule" in t for t in targets):
+            legacy_url = "https://sol.du.ac.in/all-notices.php"
+            if legacy_url not in targets:
+                targets.append(legacy_url)
+
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Scraper Job (Targeted: {targets is not None})...")
     
     # v17.0: PRODUCTION UNIFIED CONFIGURATION
@@ -176,7 +183,7 @@ async def job(targets=None):
         print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Checking for expired notices...")
         
         # Get current IST date and time
-        now_utc = datetime.datetime.utcnow()
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
         ist_offset = datetime.timedelta(hours=5, minutes=30)
         now_ist = now_utc + ist_offset
         current_date_obj = now_ist.date()
@@ -190,7 +197,11 @@ async def job(targets=None):
                     if not isinstance(notice, dict): continue # v17.0 Guard
                     notice_id = notice.get('id')
                     notice_title = notice.get('title', '')
-                    notice_date_str = str(notice.get('date', '')) # Cast to string to prevent len(None)
+                    notice_desc = notice.get('description', '')
+                    notice_date_str = str(notice.get('date', ''))
+                    
+                    # V18.5: Properly define is_live_class in this scope
+                    is_live_class = "MBA Live Class" in notice_desc or ("[" in notice_title and "] MBA Sem" in notice_title)
                     
                     try:
                         item_date = None
