@@ -249,6 +249,14 @@ class MBAScraper:
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
             
+            # V26.4: CRITICAL CONTENT LOGGING
+            if len(all_raw_tables) == 0:
+                print(f"[CRAWLER][DIAGNOSTIC]: Page URL: {page.url}")
+                page_content = await page.content()
+                print(f"[CRAWLER][DIAGNOSTIC]: FULL PAGE CONTENT SNIPPET: {page_content[:2000].replace('\\n', ' ')}")
+                if "403 Forbidden" in page_content or "Access Denied" in page_content:
+                    print("[CRAWLER][DIAGNOSTIC]: WAF BLOCK DETECTED (403/Access Denied)")
+            
             for rows in all_raw_tables:
                 # 1. FIND DATE FOR THIS TABLE
                 date_str = None
