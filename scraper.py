@@ -132,22 +132,44 @@ class MBAScraper:
                         await asyncio.sleep(5)
                         
                         try:
-                            vcs_frame = None
-                            for frame in page.frames:
-                                if "vcs.php" in frame.url:
-                                    vcs_frame = frame
-                                    break
+                            # V26.0: Generic Resource Seeker (iframe, object, embed)
+                            resource_info = await page.evaluate("""() => {
+                                const elements = Array.from(document.querySelectorAll('iframe, frame, object, embed'));
+                                for (const e of elements) {
+                                    const src = e.src || e.data || e.getAttribute('src') || e.getAttribute('data');
+                                    if (src && src.includes('vcs.php')) {
+                                        return { tag: e.tagName, url: src };
+                                    }
+                                }
+                                return null;
+                            }""")
                             
-                            if vcs_frame:
-                                print(f"[CRAWLER][STEALTH]: Found vcs.php frame: {vcs_frame.url}. Extracting content.") # type: ignore
-                                vcs_content = await vcs_frame.content() # type: ignore
+                            if resource_info:
+                                resource_url = resource_info['url']
+                                print(f"[CRAWLER][STEALTH]: Found vcs.php ({resource_info['tag']}): {resource_url}. Extracting content.")
                                 
+                                # Try to find a matching frame first
+                                vcs_frame = next((f for f in page.frames if resource_url in f.url or "vcs.php" in f.url), None)
+                                
+                                if vcs_frame:
+                                    vcs_content = await vcs_frame.content()
+                                else:
+                                    # Fallback: Fetch the resource URL directly if it's not a standard frame (e.g. object/embed)
+                                    print("[CRAWLER][STEALTH]: Resource is not a standard frame. Navigating top-level.")
+                                    await page.goto(resource_url, wait_until="networkidle", timeout=60000)
+                                    vcs_content = await page.content()
+                                
+                                # V26.1: DIAGNOSTIC LOGGING
+                                print(f"[CRAWLER][DIAGNOSTIC]: Component Page Title: {await page.title()}")
+                                snippet = vcs_content[:1000].replace('\n', ' ')
+                                print(f"[CRAWLER][DIAGNOSTIC]: Component Snippet: {snippet}")
+
                                 if "403 Forbidden" in vcs_content or "Access Denied" in vcs_content:
-                                    print("[CRAWLER][STEALTH][WARNING]: Frame content is 403. Trying Direct Top-Level Navigation...")
-                                    await page.goto(vcs_frame.url, wait_until="networkidle", timeout=60000) # type: ignore
+                                    print("[CRAWLER][STEALTH][WARNING]: Component content is 403. Trying Direct Top-Level Navigation...")
+                                    await page.goto(resource_url, wait_until="networkidle", timeout=60000)
                                     await asyncio.sleep(5)
                                 else:
-                                    print("[CRAWLER][STEALTH]: Successfully read frame content via frame.content().")
+                                    print("[CRAWLER][STEALTH]: Successfully read component content.")
                                     await page.evaluate(f"""(html) => {{
                                         const div = document.createElement('div');
                                         div.id = 'ghost-vcs-container';
@@ -155,7 +177,7 @@ class MBAScraper:
                                         document.body.appendChild(div);
                                     }}""", vcs_content)
                             else:
-                                print("[CRAWLER][STEALTH][WARNING]: No frame found. Trying direct hit.")
+                                print("[CRAWLER][STEALTH][WARNING]: No vcs.php resource found. Trying direct hit.")
                                 await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
                                 await asyncio.sleep(5)
                         except Exception as e:
