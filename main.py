@@ -226,9 +226,15 @@ async def job(targets=None):
                                     except: pass
 
                         if item_date:
-                            # RELAXED CLEANUP: Only remove if older than 15 days (preserve some history)
+                            # STRICT CLEANUP for Live Classes: Delete if date is past
+                            if is_live_class and item_date < current_date_obj:
+                                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Removing past live class: {notice_title} ({notice_date_str})")
+                                notifier.delete_from_website(sem, notice_id)
+                                continue
+
+                            # RELAXED CLEANUP for other notices: Only remove if older than 15 days
                             cleanup_threshold = current_date_obj - datetime.timedelta(days=15)
-                            if item_date < cleanup_threshold:
+                            if not is_live_class and item_date < cleanup_threshold:
                                 print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [CLEANUP]: Removing very old notice: {notice_title} ({notice_date_str})")
                                 notifier.delete_from_website(sem, notice_id)
                                 continue
