@@ -43,7 +43,7 @@ class MBAScraper:
         self.notices = []
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
-        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
+        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "652ee4df232c710d89ef5c6a7b5df80d")
         print(f"[JOB]: Scraper API Key configured: {'YES' if self.scraper_api_key else 'NO'}")
         print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
