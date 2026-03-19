@@ -133,9 +133,10 @@ class MBAScraper:
                                 const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
                                     credentials: 'include',
                                     headers: {
-                                        'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule',
-                                        'X-Requested-With': 'XMLHttpRequest'
-                                    }
+                                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                                         'Accept-Language': 'en-US,en;q=0.5',
+                                         'Referer': 'https://web.sol.du.ac.in/home'
+                                     }
                                 });
                                 if (!response.ok) return `FETCH_ERROR_${response.status}`;
                                 return await response.text();
@@ -145,11 +146,12 @@ class MBAScraper:
                         }""")
                         
                         if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
-                            print(f"[CRAWLER][STEALTH][ERROR]: Ghost Fetch failed: {vcs_content}")
-                            # V17.5 Fallback: Natural Direct Navigation
-                            print("[CRAWLER][STEALTH]: Final attempt: Natural Direct Navigation...")
-                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=90000)
+                            print(f"[CRAWLER][STEALTH][WARNING]: Ghost Fetch failed ({vcs_content}). Trying Direct Navigation...")
+                            # Ultimate Fallback: Navigate directly to the vcs.php URL
+                            await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
+                            await asyncio.sleep(5)
                         else:
+                            # Inject success content
                             print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content...")
                             await page.evaluate(f"""(html) => {{
                                 const div = document.createElement('div');

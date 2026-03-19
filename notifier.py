@@ -52,7 +52,8 @@ class Notifier:
         }
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("POST", url, json=payload, headers=headers)
-        return resp is not None and resp.status_code == 201
+        # Success if 201 (Created) or 409 (Conflict = Already exists)
+        return resp is not None and resp.status_code in [201, 409]
 
     def update_on_website(self, semester, item_id, notice_data):
         url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"
