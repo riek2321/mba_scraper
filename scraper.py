@@ -126,64 +126,37 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V25.0: Frame-Breaker Logic using the EXISTING page
-                        print("[CRAWLER]: Priming session on Info Page...")
-                        await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="networkidle", timeout=60000)
-                        await asyncio.sleep(5)
+                        # V27.0: ULTIMATE CLICK-THROUGH BYPASS
+                        print("[CRAWLER]: Executing Click-Through Bypass for Schedule...")
                         
                         try:
-                            # V26.0: Generic Resource Seeker (iframe, object, embed)
-                            resource_info = await page.evaluate("""() => {
-                                const elements = Array.from(document.querySelectorAll('iframe, frame, object, embed'));
-                                for (const e of elements) {
-                                    const src = e.src || e.data || e.getAttribute('src') || e.getAttribute('data');
-                                    if (src && src.includes('vcs.php')) {
-                                        return { tag: e.tagName, url: src };
-                                    }
-                                }
-                                return null;
-                            }""")
+                            # 1. Start at Subdomain Home (to drop session cookies)
+                            print("[CRAWLER][BYPASS]: Visiting Subdomain Home (home.php)...")
+                            await page.goto("https://sol.du.ac.in/home.php", wait_until="networkidle", timeout=60000)
+                            await asyncio.sleep(3)
                             
-                            if resource_info:
-                                resource_url = resource_info['url']
-                                print(f"[CRAWLER][STEALTH]: Found vcs.php ({resource_info['tag']}): {resource_url}. Extracting content.")
-                                
-                                # Try to find a matching frame first
-                                vcs_frame = next((f for f in page.frames if resource_url in f.url or "vcs.php" in f.url), None)
-                                
-                                if vcs_frame:
-                                    vcs_content = await vcs_frame.content()
-                                else:
-                                    # Fallback: Fetch the resource URL directly if it's not a standard frame (e.g. object/embed)
-                                    print("[CRAWLER][STEALTH]: Resource is not a standard frame. Navigating top-level.")
-                                    await page.goto(resource_url, wait_until="networkidle", timeout=60000)
-                                    vcs_content = await page.content()
-                                
-                                # V26.1: DIAGNOSTIC LOGGING
-                                try:
-                                    print(f"[CRAWLER][DIAGNOSTIC]: Component Page Title: {await page.title()}")
-                                    clean_snippet = vcs_content[:1000].replace("\n", " ")
-                                    print(f"[CRAWLER][DIAGNOSTIC]: Component Snippet: {clean_snippet}")
-                                except: pass
-
-                                if "403 Forbidden" in vcs_content or "Access Denied" in vcs_content:
-                                    print("[CRAWLER][STEALTH][WARNING]: Component content is 403. Trying Direct Top-Level Navigation...")
-                                    await page.goto(resource_url, wait_until="networkidle", timeout=60000)
-                                    await asyncio.sleep(5)
-                                else:
-                                    print("[CRAWLER][STEALTH]: Successfully read component content.")
-                                    await page.evaluate(f"""(html) => {{
-                                        const div = document.createElement('div');
-                                        div.id = 'ghost-vcs-container';
-                                        div.innerHTML = html;
-                                        document.body.appendChild(div);
-                                    }}""", vcs_content)
-                            else:
-                                print("[CRAWLER][STEALTH][WARNING]: No vcs.php resource found. Trying direct hit.")
+                            # 2. Click 'Online Class Schedule' link
+                            print("[CRAWLER][BYPASS]: Finding and Clicking 'Online Class Schedule' link...")
+                            # Use a robust selector that finds the link by text
+                            link_selector = "a:has-text('Online Class Schedule')"
+                            await page.wait_for_selector(link_selector, timeout=20000)
+                            
+                            # Click it
+                            await page.click(link_selector)
+                            print("[CRAWLER][BYPASS]: Clicked. Waiting for Target Page Load...")
+                            
+                            # Wait for the target page (Info Page)
+                            await page.wait_for_load_state("networkidle", timeout=60000)
+                            await asyncio.sleep(5) # Give vcs.php time to inject
+                            
+                            # 3. Diagnostic check of final content
+                            final_content = await page.content()
+                            if "403 Forbidden" in final_content or "Access Denied" in final_content:
+                                print("[CRAWLER][BYPASS][WARNING]: Target page is still 403. Trying Direct Hit fallback...")
                                 await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
                                 await asyncio.sleep(5)
                         except Exception as e:
-                            print(f"[CRAWLER][STEALTH][ERROR]: Hunter failed: {e}")
+                            print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}. Falling back to direct hit.")
                             await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
 
                         await self.extract_online_classes(page)
