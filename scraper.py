@@ -145,6 +145,10 @@ class MBAScraper:
                                 async with context.expect_page(timeout=30000) as new_page_info:
                                     await page.click(link_selector)
                                 target_page = await new_page_info.value
+                                try:
+                                    from playwright_stealth import stealth_async # type: ignore
+                                    await stealth_async(target_page)
+                                except: pass
                                 print("[CRAWLER][BYPASS]: Captured NEW TAB. Switching contexts.")
                             except:
                                 print("[CRAWLER][BYPASS]: No new tab. Proceeding on current page.")
