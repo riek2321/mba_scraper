@@ -120,33 +120,46 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.0: NATURAL NAVIGATION (Anti-403)
-                        # Instead of direct navigation, visit home and click the 'Online Classes' link
-                        # to mimic a real student flow.
+                        # V17.6: IN-BROWSER FETCH (The "Ghost" Protocol)
+                        # Instead of navigating to the schedule page (WAF target),
+                        # we stay on a "safe" page (Home) and use the browser's authenticated
+                        # session to fetch the vcs.php content via Javascript.
                         home_url = "https://web.sol.du.ac.in/home"
-                        print(f"[CRAWLER][STEALTH]: Navigating to Home first: {home_url}")
+                        print(f"[CRAWLER][STEALTH]: Navigating to Safe Hub: {home_url}")
                         
                         await page.goto(home_url, wait_until="networkidle", timeout=90000)
-                        await asyncio.sleep(random.uniform(3, 6))
+                        await asyncio.sleep(random.uniform(5, 10))
                         
-                        print("[CRAWLER][STEALTH]: Attempting to click through menu...")
-                        try:
-                            # 1. Hover 'Students'
-                            await page.hover("text='Students'", timeout=10000)
-                            await asyncio.sleep(1)
-                            # 2. Click 'Online Classes' (or 'Online Class Schedule')
-                            # The subagent found "Online Classes" under Students
-                            await page.click("text='Online Classes'", timeout=10000)
-                            print("[CRAWLER][STEALTH]: Clicked navigation link.")
-                        except Exception as e:
-                            print(f"[CRAWLER][STEALTH][WARNING]: Click navigation failed: {e}. Falling back to Referer-Goto...")
-                            # Fallback to direct navigation with Referer
-                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
-                                           wait_until="load", timeout=90000, 
-                                           referer=home_url)
+                        print("[CRAWLER][STEALTH]: Executing Ghost Fetch for vcs.php...")
+                        vcs_content = await page.evaluate("""async () => {
+                            try {
+                                const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
+                                    headers: {
+                                        'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule',
+                                        'X-Requested-With': 'XMLHttpRequest'
+                                    }
+                                });
+                                if (!response.ok) return `FETCH_ERROR_${response.status}`;
+                                return await response.text();
+                            } catch (e) {
+                                return `FETCH_EXCEPTION_${e.message}`;
+                            }
+                        }""")
                         
-                        print("[CRAWLER][STEALTH]: Waiting for schedule stability...")
-                        await asyncio.sleep(random.uniform(10, 15))
+                        if vcs_content.startswith("FETCH_ERROR") or vcs_content.startswith("FETCH_EXCEPTION"):
+                            print(f"[CRAWLER][STEALTH][ERROR]: Ghost Fetch failed: {vcs_content}")
+                            # Final fallback: Attempt direct navigation if fetch failed
+                            print("[CRAWLER][STEALTH]: Final attempt: Direct Navigation...")
+                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="load", timeout=60000)
+                        else:
+                            print("[CRAWLER][STEALTH]: Ghost Fetch successful. Injecting content for parsing...")
+                            # Inject the fetched HTML into a temporary container on the current page for parsing
+                            await page.evaluate(f"""(html) => {{
+                                const div = document.createElement('div');
+                                div.id = 'ghost-vcs-container';
+                                div.innerHTML = html;
+                                document.body.appendChild(div);
+                            }}""", vcs_content)
                         
                         await self.extract_online_classes(page)
                     else:
@@ -273,12 +286,13 @@ class MBAScraper:
                                 not href or 
                                 ("online-class-schedule" in href and not is_teams_link) or # type: ignore
                                 "..." in href or # type: ignore
-                                "login" in link_text.lower() or 
-                                "available soon" in link_text.lower()
+                                ("available soon" in link_text.lower() and not is_teams_link)
                             )
                             
                             if is_pending:
                                 final_link = "#pending"
+                            elif is_teams_link:
+                                final_link = href
                             
                             now_utc = datetime.datetime.utcnow()
                             ist_offset = datetime.timedelta(hours=5, minutes=30)
