@@ -53,26 +53,28 @@ async def job(targets=None):
         is_empty = cursor.fetchone()[0] == 0
 
     try:
-        # Pre-Check for Online Class Schedule (Watchdog) - Unified V15/16 Direct URL
-        CLASS_URL = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
+        # Pre-Check for Online Class Schedule (Watchdog) - V17.0 Stealth Parent URL
+        CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
         
         # Only probe if classes are in our targets (or if targets is None for full scan)
         if targets is None or CLASS_URL in targets:
             print(f"[WATCHDOG]: Probing Class Schedule URL...")
             try:
-                # Use very stealthy headers for the probe
+                # Use very stealthy headers for the probe (Matching v17.0 Scraper)
                 probe_headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
                     "Accept-Encoding": "gzip, deflate, br",
                     "Cache-Control": "max-age=0",
+                    "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+                    "Sec-Ch-Ua-Mobile": "?0",
+                    "Sec-Ch-Ua-Platform": '"Windows"',
                     "Sec-Fetch-Dest": "document",
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",
                     "Sec-Fetch-User": "?1",
-                    "Upgrade-Insecure-Requests": "1",
-                    "Referer": "https://web.sol.du.ac.in/info/online-class-schedule"
+                    "Upgrade-Insecure-Requests": "1"
                 }
                 resp = requests.get(CLASS_URL, headers=probe_headers, timeout=20)
                 
@@ -303,7 +305,7 @@ async def main():
     print(f"Mode: PATIENT Watchdog | Pulse: 300s | Full Scan: 900s")
     
     pulse_index = 0
-    CLASS_URL = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
+    CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
     
     while True:
         try:

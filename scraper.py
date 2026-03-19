@@ -30,10 +30,10 @@ class MBAScraper:
         self.visited = set()
         self.notices = []
         self.days_back = 15 # Default
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
         self.targets = [
             "https://sol.du.ac.in/home.php",
-            "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct URL V15.0
+            "https://web.sol.du.ac.in/info/online-class-schedule", # Visit Parent instead of Direct vcs.php
             "https://sol.du.ac.in/all-notices.php"
         ]
 
@@ -44,11 +44,15 @@ class MBAScraper:
             browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
             
             headers = {
-                "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
+                "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
                 "Sec-Ch-Ua-Mobile": "?0",
                 "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
                 "Upgrade-Insecure-Requests": "1"
             }
             
@@ -59,12 +63,20 @@ class MBAScraper:
             )
             page = await context.new_page()
 
-            # v15.0: SESSION PRIMER (Establishing cookies on 'web' subdomain)
-            print("[CRAWLER]: Priming Subdomain Session (web.sol.du.ac.in)")
+            # v17.0: ADVANCED SESSION PRIMER
+            print("[CRAWLER]: Priming Multi-Step Session (web.sol.du.ac.in)")
             try:
-                await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(5)
-            except Exception: pass
+                # Step 1: Root site
+                print("[CRAWLER][PRIMER]: Visiting Root...")
+                await page.goto("https://web.sol.du.ac.in/home", wait_until="networkidle", timeout=60000)
+                await asyncio.sleep(random.uniform(5, 8))
+                
+                # Step 2: Intermediate page (Student Support or similar)
+                print("[CRAWLER][PRIMER]: Visiting Student Support...")
+                await page.goto("https://web.sol.du.ac.in/info/student-support", wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(random.uniform(3, 5))
+            except Exception as e: 
+                print(f"[CRAWLER][PRIMER][WARNING]: Primer interrupted: {e}")
 
             # v15.0: REQUEST INTERCEPTION (Bypass 403)
             async def intercept_vcs(route):
@@ -82,16 +94,20 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.0: STEALTH NAVIGATION - Visit parent page first to establish full session context
-                        parent_url = "https://web.sol.du.ac.in/info/online-class-schedule"
-                        print(f"[CRAWLER][STEALTH]: Visiting parent {parent_url} first...")
-                        await page.goto(parent_url, wait_until="networkidle", timeout=60000)
-                        await asyncio.sleep(random.uniform(3, 7))
+                        # V17.0: IN-SITU EXTRACTION (Anti-403)
+                        # Instead of direct navigation to vcs.php which is often blocked for independent requests,
+                        # we visit the official parent page and extract from the loaded iframe context.
+                        target_page = "https://web.sol.du.ac.in/info/online-class-schedule"
+                        print(f"[CRAWLER][STEALTH]: Navigating to official schedule page: {target_page}")
                         
-                        print(f"[CRAWLER][STEALTH]: Now navigating to direct source {url}...")
-                        # V15.0: Direct Extraction prioritized with manual Referer
-                        await page.goto(url, wait_until="load", timeout=90000, 
-                                       referer=parent_url)
+                        await page.goto(target_page, wait_until="networkidle", timeout=90000)
+                        await asyncio.sleep(random.uniform(10, 15)) # Give iframe plenty of time
+                        
+                        # Extra interaction to ensure iframe is keyed
+                        await page.mouse.wheel(0, 500)
+                        await asyncio.sleep(2)
+                        await page.mouse.wheel(0, -500)
+                        
                         await self.extract_online_classes(page)
                     else:
                         await page.goto(url, wait_until="domcontentloaded", timeout=90000)
