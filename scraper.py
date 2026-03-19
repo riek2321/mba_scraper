@@ -125,9 +125,47 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V27.0: ULTIMATE CLICK-THROUGH BYPASS
-                        print("[CRAWLER]: Executing Click-Through Bypass for Schedule...")
+                        # V33.0: GHOST FETCH PROTOCOL (Ultimate Bypass)
+                        print("[CRAWLER]: Initiating GHOST FETCH Protocol for Schedule...")
                         
+                        try:
+                            # 1. Warm up the session on the main trusted site
+                            print("[CRAWLER][GHOST]: Priming session on sol.du.ac.in...")
+                            await page.goto("https://sol.du.ac.in/home.php", wait_until="networkidle", timeout=60000)
+                            await asyncio.sleep(5)
+                            
+                            # 2. GHOST FETCH: Run fetch() FROM INSIDE the authenticated browser context
+                            # This bypasses Cloudflare/WAF because it looks like a legitimate AJAX call from a trusted page.
+                            print("[CRAWLER][GHOST]: Executing In-Browser Fetch to vcs.php...")
+                            html_content = await page.evaluate("""async () => {
+                                try {
+                                    const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
+                                        headers: {
+                                            'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule'
+                                        }
+                                    });
+                                    if (!response.ok) return `GHOST_ERROR: ${response.status}`;
+                                    return await response.text();
+                                } catch (e) {
+                                    return `GHOST_FETCH_FAILED: ${e.message}`;
+                                }
+                            }""")
+                            
+                            if html_content and "GHOST_ERROR" not in html_content and "GHOST_FETCH_FAILED" not in html_content:
+                                print("[CRAWLER][GHOST]: Fetch SUCCESS. Parsing content.")
+                                # We need a temporary page to parse the HTML and find the table
+                                ghost_page = await context.new_page()
+                                await ghost_page.set_content(html_content)
+                                await self.extract_online_classes(ghost_page)
+                                await ghost_page.close()
+                                return
+                            else:
+                                print(f"[CRAWLER][GHOST][WARNING]: Ghost fetch failed: {html_content}. Falling back to click flow.")
+                        except Exception as e:
+                            print(f"[CRAWLER][GHOST][ERROR]: Ghost protocol failed: {e}. Falling back to click flow.")
+
+                        # V27.0: ULTIMATE CLICK-THROUGH BYPASS (Restored as Fallback)
+                        print("[CRAWLER]: Executing Click-Through Bypass for Schedule...")
                         try:
                             # 1. Start at Subdomain Home (to drop session cookies)
                             print("[CRAWLER][BYPASS]: Visiting Subdomain Home (home.php)...")
@@ -135,38 +173,20 @@ class MBAScraper:
                             await asyncio.sleep(3)
                             
                             # 2. Click 'Online Class Schedule' link and CAPTURE NEW PAGE
-                            print("[CRAWLER][BYPASS]: Finding and Clicking 'Online Class Schedule' link...")
                             link_selector = "a:has-text('Online Class Schedule')"
                             await page.wait_for_selector(link_selector, timeout=20000)
                             
-                            # SOL links often open in new tabs
-                            try:
-                                async with context.expect_page(timeout=30000) as new_page_info:
-                                    await page.click(link_selector)
-                                target_page = await new_page_info.value
-                                try:
-                                    from playwright_stealth import stealth_async # type: ignore
-                                    await stealth_async(target_page)
-                                except: pass
-                                print("[CRAWLER][BYPASS]: Captured NEW TAB. Switching contexts.")
-                            except:
-                                print("[CRAWLER][BYPASS]: No new tab. Proceeding on current page.")
+                            async with context.expect_page(timeout=30000) as new_page_info:
                                 await page.click(link_selector)
-                                target_page = page
-
-                            print("[CRAWLER][BYPASS]: Waiting for Target Page Load...")
+                            target_page = await new_page_info.value
+                            
+                            print("[CRAWLER][BYPASS]: Captured NEW TAB. Parsing...")
                             await target_page.wait_for_load_state("load", timeout=60000)
-                            await asyncio.sleep(10) # Heavy sleep for vcs.php inject
-                            
-                            # Extract from the target page
+                            await asyncio.sleep(5)
                             await self.extract_online_classes(target_page)
-                            return # Avoid falling through to extra extraction on wrong page
-                            
+                            return
                         except Exception as e:
-                            print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}. Falling back to direct hit.")
-                            await page.goto("https://web.sol.du.ac.in/my/team_schedules/vcs.php", wait_until="networkidle", timeout=60000)
-
-                        await self.extract_online_classes(page)
+                            print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}.")
                     else:
                         await page.goto(url, wait_until="domcontentloaded", timeout=90000)
                         await asyncio.sleep(random.uniform(2, 5))
