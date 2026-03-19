@@ -160,9 +160,11 @@ class MBAScraper:
                                     vcs_content = await page.content()
                                 
                                 # V26.1: DIAGNOSTIC LOGGING
-                                print(f"[CRAWLER][DIAGNOSTIC]: Component Page Title: {await page.title()}")
-                                snippet = vcs_content[:1000].replace('\n', ' ')
-                                print(f"[CRAWLER][DIAGNOSTIC]: Component Snippet: {snippet}")
+                                try:
+                                    print(f"[CRAWLER][DIAGNOSTIC]: Component Page Title: {await page.title()}")
+                                    clean_snippet = vcs_content[:1000].replace("\n", " ")
+                                    print(f"[CRAWLER][DIAGNOSTIC]: Component Snippet: {clean_snippet}")
+                                except: pass
 
                                 if "403 Forbidden" in vcs_content or "Access Denied" in vcs_content:
                                     print("[CRAWLER][STEALTH][WARNING]: Component content is 403. Trying Direct Top-Level Navigation...")
@@ -253,7 +255,8 @@ class MBAScraper:
             if len(all_raw_tables) == 0:
                 print(f"[CRAWLER][DIAGNOSTIC]: Page URL: {page.url}")
                 page_content = await page.content()
-                print(f"[CRAWLER][DIAGNOSTIC]: FULL PAGE CONTENT SNIPPET: {page_content[:2000].replace('\\n', ' ')}")
+                clean_content = page_content[:2000].replace("\n", " ")
+                print(f"[CRAWLER][DIAGNOSTIC]: FULL PAGE CONTENT SNIPPET: {clean_content}")
                 if "403 Forbidden" in page_content or "Access Denied" in page_content:
                     print("[CRAWLER][DIAGNOSTIC]: WAF BLOCK DETECTED (403/Access Denied)")
             
