@@ -53,41 +53,37 @@ async def job(targets=None):
         is_empty = cursor.fetchone()[0] == 0
 
     try:
-        # Pre-Check for Online Class Schedule (Watchdog) - V17.0 Stealth Parent URL
-        CLASS_URL = "https://web.sol.du.ac.in/info/online-class-schedule"
+        # Pre-Check for Subdomain Health (Watchdog) - V17.0 Stealth
+        HEALTH_URL = "https://web.sol.du.ac.in/home"
         
-        # Only probe if classes are in our targets (or if targets is None for full scan)
-        if targets is None or CLASS_URL in targets:
-            print(f"[WATCHDOG]: Probing Class Schedule URL...")
+        # Only probe if we are doing a full scan or if home is targeted
+        if targets is None or HEALTH_URL in targets:
+            print(f"[WATCHDOG]: Probing Subdomain Health...")
             try:
                 # Use very stealthy headers for the probe (Matching v17.0 Scraper)
                 probe_headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.81",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
                     "Accept-Language": "en-US,en;q=0.9",
                     "Accept-Encoding": "gzip, deflate, br",
                     "Cache-Control": "max-age=0",
-                    "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+                    "Sec-Ch-Ua": '"Microsoft Edge";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
                     "Sec-Ch-Ua-Mobile": "?0",
                     "Sec-Ch-Ua-Platform": '"Windows"',
                     "Sec-Fetch-Dest": "document",
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",
                     "Sec-Fetch-User": "?1",
-                    "Accept-Encoding": "gzip, deflate, br",
                     "Upgrade-Insecure-Requests": "1"
                 }
-                resp = requests.get(CLASS_URL, headers=probe_headers, timeout=20)
+                resp = requests.get(HEALTH_URL, headers=probe_headers, timeout=20)
                 
-                if resp.status_code == 403:
-                    print(f"[WATCHDOG][WARNING]: Class Schedule returned 403 (Forbidden) to simple probe.")
-                    print(f"                     Will attempt deep scrape anyway as Playwright has better stealth.")
-                elif resp.status_code != 200:
-                    print(f"[WATCHDOG][ERROR]: Class Schedule returned {resp.status_code}. Attempting deep scrape anyway.")
+                if resp.status_code != 200:
+                    print(f"[WATCHDOG][WARNING]: Subdomain Health returned {resp.status_code}.")
                 else:
-                    print(f"[WATCHDOG][ONLINE]: Class Schedule is reachable!")
+                    print(f"[WATCHDOG][ONLINE]: Subdomain is reachable!")
             except Exception as e:
-                print(f"[WATCHDOG][FAIL]: Connection failed: {e}. Attempting deep scrape anyway.")
+                print(f"[WATCHDOG][FAIL]: Connection failed: {e}.")
 
         # 1. RUN TARGETED OR EXHAUSTIVE SCRAPE
         found_notices = await scraper.run(days_back=15, targets=targets)
@@ -317,7 +313,8 @@ async def main():
             else:
                 # Other pulses run TARGETED CLASS SCAN (every 300 seconds)
                 print(f"\n[PULSE {pulse_index}]: Triggering TARGETED CLASS SCAN...")
-                await job(targets=[CLASS_URL])
+                # targeted class scan now uses the internal target name in scraper.py
+                await job(targets=["https://web.sol.du.ac.in/info/online-class-schedule"])
             
             pulse_index += 1 # type: ignore
             print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SLEEP]: Pulse complete. Next pulse in 300 seconds...")

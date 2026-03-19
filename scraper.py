@@ -63,10 +63,18 @@ class MBAScraper:
                 "Cache-Control": "max-age=0"
             }
             
+            # v17.0: Randomized Viewport
+            viewports = [
+                {'width': 1366, 'height': 768},
+                {'width': 1536, 'height': 864},
+                {'width': 1920, 'height': 1080},
+                {'width': 1440, 'height': 900}
+            ]
+            
             context = await browser.new_context(
                 user_agent=self.user_agent,
                 extra_http_headers=headers,
-                viewport={'width': 1920, 'height': 1080}
+                viewport=random.choice(viewports)
             )
             page = await context.new_page()
             
@@ -112,23 +120,33 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V17.0: IN-SITU EXTRACTION (Anti-403)
-                        # Instead of direct navigation to vcs.php which is often blocked for independent requests,
-                        # we visit the official parent page and extract from the loaded iframe context.
-                        target_page = "https://web.sol.du.ac.in/info/online-class-schedule"
-                        print(f"[CRAWLER][STEALTH]: Navigating to official schedule page: {target_page}")
+                        # V17.0: NATURAL NAVIGATION (Anti-403)
+                        # Instead of direct navigation, visit home and click the 'Online Classes' link
+                        # to mimic a real student flow.
+                        home_url = "https://web.sol.du.ac.in/home"
+                        print(f"[CRAWLER][STEALTH]: Navigating to Home first: {home_url}")
                         
-                        # Add referer explicitly to navigation
-                        await page.goto(target_page, wait_until="load", timeout=90000, 
-                                       referer="https://web.sol.du.ac.in/home")
+                        await page.goto(home_url, wait_until="networkidle", timeout=90000)
+                        await asyncio.sleep(random.uniform(3, 6))
                         
-                        print("[CRAWLER][STEALTH]: Waiting for iframe stability...")
-                        await asyncio.sleep(random.uniform(5, 10))
+                        print("[CRAWLER][STEALTH]: Attempting to click through menu...")
+                        try:
+                            # 1. Hover 'Students'
+                            await page.hover("text='Students'", timeout=10000)
+                            await asyncio.sleep(1)
+                            # 2. Click 'Online Classes' (or 'Online Class Schedule')
+                            # The subagent found "Online Classes" under Students
+                            await page.click("text='Online Classes'", timeout=10000)
+                            print("[CRAWLER][STEALTH]: Clicked navigation link.")
+                        except Exception as e:
+                            print(f"[CRAWLER][STEALTH][WARNING]: Click navigation failed: {e}. Falling back to Referer-Goto...")
+                            # Fallback to direct navigation with Referer
+                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
+                                           wait_until="load", timeout=90000, 
+                                           referer=home_url)
                         
-                        # Extra interaction to ensure iframe is keyed
-                        await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-                        await page.mouse.wheel(0, 300)
-                        await asyncio.sleep(2)
+                        print("[CRAWLER][STEALTH]: Waiting for schedule stability...")
+                        await asyncio.sleep(random.uniform(10, 15))
                         
                         await self.extract_online_classes(page)
                     else:
