@@ -310,36 +310,70 @@ class MBAScraper:
             return self.notices # v16.0: Fix NoneType error in main.py
 
     async def extract_online_classes(self, page):
-        """Specifically parse the online class schedule table (Direct/V15.0)"""
+        """V36.0: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
         print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
+        
         try:
-            # 1. Wait for Table with timeout
+            # 1. IFRAME DETECTION: Get all iframe srcs from the page
+            raw_srcs = await page.evaluate("""() => 
+                Array.from(document.querySelectorAll('iframe')).map(f => {
+                    try { return f.src; } catch(e) { return null; }
+                }).filter(src => src !== null)
+            """)
+            iframe_srcs = list(raw_srcs) if isinstance(raw_srcs, list) else []
+            print(f"[CRAWLER][IFRAME]: Found {len(iframe_srcs)} iframes.")
+            
+            # 2. TARGET SELECTION: Find vcs.php iframe specifically
+            vcs_url = next((s for s in iframe_srcs if 'vcs' in s.lower() or 'team_schedules' in s.lower()), None)
+            
+            target_ctx = page
+            vcs_page = None
+            
+            if vcs_url:
+                print(f"[CRAWLER][IFRAME]: Direct Hit! Navigating to: {vcs_url}")
+                try:
+                    # Open vcs_url as a new page WITH the parent page's referer to bypass WAF
+                    vcs_page = await page.context.new_page()
+                    await vcs_page.goto(vcs_url, 
+                        wait_until="networkidle", 
+                        timeout=60000,
+                        referer="https://web.sol.du.ac.in/info/online-class-schedule"
+                    )
+                    await asyncio.sleep(5)
+                    target_ctx = vcs_page
+                except Exception as e:
+                    print(f"[CRAWLER][IFRAME][ERROR]: Failed to navigate into iframe: {e}. Falling back to page scan.")
+                    target_ctx = page
+            else:
+                print("[CRAWLER][IFRAME]: No vcs iframe found, scanning all available frames...")
+                target_ctx = page
+
+            # 3. EXTRACTION: Now extract tables from target_ctx
+            all_raw_tables = []
+            
+            # Start with the targeted context
+            contexts_to_scan = [target_ctx]
+            
+            # Add frames if target_ctx is a Page-like object
             try:
-                await page.wait_for_selector("table", timeout=20000)
-            except Exception:
-                print("[CRAWLER][WARNING]: Table not found immediately. Triggering interaction...")
-
-            # 2. Human-Like Mouse/Keyboard Moves
-            await page.mouse.move(random.randint(200, 400), random.randint(200, 400))
-            for _ in range(3):
-                await page.keyboard.press("PageDown")
-                await asyncio.sleep(1)
-            await asyncio.sleep(5) 
-        except Exception as e:
-            print(f"[CRAWLER][WARNING]: Interaction trigger failed: {e}")
-
-        all_raw_tables = []
-        try:
-            # V25.1: Final Production Extraction
-            contexts_to_scan = [page] + page.frames
-            print(f"[CRAWLER]: Scanning {len(contexts_to_scan)} contexts (Page + Frames)")
+                # Type safe way to get frames
+                if hasattr(target_ctx, "frames"):
+                    # Use a temporary variable to help the type checker
+                    frames_list = getattr(target_ctx, "frames")
+                    if isinstance(frames_list, list):
+                        for f in frames_list:
+                            contexts_to_scan.append(f)
+            except Exception: pass
+            
+            print(f"[CRAWLER]: Accessing {len(contexts_to_scan)} contexts for table extraction.")
             
             for ctx in contexts_to_scan:
                 try:
-                    # Check if context is accessible
+                    # Optimized JS for row-level cell extraction
                     tables_data = await ctx.evaluate("""() => {
                         try {
-                            return Array.from(document.querySelectorAll('table')).map(table => {
+                            const found_tables = document.querySelectorAll('table');
+                            return Array.from(found_tables).map(table => {
                                 return Array.from(table.querySelectorAll('tr')).map(tr => 
                                     Array.from(tr.querySelectorAll('td, th')).map(cell => {
                                         const a = cell.querySelector('a');
@@ -350,11 +384,16 @@ class MBAScraper:
                         } catch (e) { return null; }
                     }""")
                     if isinstance(tables_data, list):
-                        for t in tables_data:
-                            all_raw_tables.append(t)
+                        for t in tables_data: all_raw_tables.append(t)
                 except Exception: continue
 
             print(f"[CRAWLER]: Final raw table count: {len(all_raw_tables)}")
+            
+            # Close the temporary iframe page if created
+            if vcs_page is not None:
+                try:
+                    await getattr(vcs_page, "close")()
+                except Exception: pass
             
             # V26.4: CRITICAL CONTENT LOGGING
             if len(all_raw_tables) == 0:
