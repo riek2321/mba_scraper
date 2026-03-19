@@ -37,10 +37,9 @@ def run_health_server():
 async def job(targets=None):
     print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting Scraper Job (Targeted: {targets is not None})...")
     
-    # Configuration via environment variables
-    # v16.0: UNIFIED CONFIGURATION
+    # v17.0: PRODUCTION UNIFIED CONFIGURATION
     API_URL = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
-    API_KEY = os.environ.get("SCRAPER_KEY", "7072")
+    API_KEY = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
     scraper = MBAScraper()
     db = ScraperDatabase()
@@ -188,9 +187,10 @@ async def job(targets=None):
                 if not notices: continue
                 
                 for notice in notices:
+                    if not isinstance(notice, dict): continue # v17.0 Guard
                     notice_id = notice.get('id')
                     notice_title = notice.get('title', '')
-                    notice_date_str = notice.get('date', '') # Expects YYYY-MM-DD
+                    notice_date_str = str(notice.get('date', '')) # Cast to string to prevent len(None)
                     
                     try:
                         item_date = None
