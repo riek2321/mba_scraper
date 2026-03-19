@@ -4,6 +4,9 @@ on:
     - cron: '0 * * * *' # Every hour
   workflow_dispatch: # Manual trigger
 
+permissions:
+  contents: write # Needed for pushing the keep-alive commit
+
 jobs:
   scrape:
     runs-on: ubuntu-22.04
@@ -27,4 +30,17 @@ jobs:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
         run: |
-          if [ -f scraper.py ]; then python scraper.py; elif [ -f mba_scraper/scraper.py ]; then python mba_scraper/scraper.py; fi
+          if [ -f scraper.py ]; then
+            python scraper.py
+          elif [ -f mba_scraper/scraper.py ]; then
+            python mba_scraper/scraper.py
+          fi
+
+      - name: Keep-Alive Activity (Prevents 60-day pause)
+        run: |
+          date > keep_alive.txt
+          git config --local user.email "action@github.com"
+          git config --local user.name "github-actions[bot]"
+          git add keep_alive.txt
+          git commit -m "Auto-keep-alive: $(date)" || echo "No changes to commit"
+          git push
