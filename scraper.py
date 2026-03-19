@@ -28,6 +28,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from curl_cffi import requests as cffi_requests # type: ignore
+    from bs4 import BeautifulSoup # type: ignore
+except ImportError:
+    pass
+
 class MBAScraper:
     def __init__(self, base_url: str = "https://web.sol.du.ac.in/home"):
         self.base_url = base_url
@@ -41,6 +47,102 @@ class MBAScraper:
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
             "https://sol.du.ac.in/all-notices.php"
         ]
+
+    async def fetch_schedule_cffi(self) -> list:
+        """V35.0: TLS Fingerprint Impersonation via curl_cffi"""
+        print("[CRAWLER][CFFI]: Attempting Chrome TLS impersonation...")
+        try:
+            session = cffi_requests.Session(impersonate="chrome120")
+            
+            # Step 1: Prime session on main portal
+            session.get("https://sol.du.ac.in/home.php", timeout=30)
+            
+            # Step 2: Hit subdomain home
+            session.get("https://web.sol.du.ac.in/home", timeout=30)
+            
+            # Step 3: Fetch the actual schedule page
+            r = session.get(
+                "https://web.sol.du.ac.in/info/online-class-schedule",
+                headers={
+                    "Referer": "https://web.sol.du.ac.in/home",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+                },
+                timeout=30
+            )
+            
+            print(f"[CRAWLER][CFFI]: Response status: {r.status_code}")
+            
+            if r.status_code == 403:
+                print("[CRAWLER][CFFI]: Still 403. WAF is very aggressive.")
+                return []
+            
+            # Parse the HTML
+            soup = BeautifulSoup(r.text, "html.parser")
+            tables = soup.find_all("table")
+            print(f"[CRAWLER][CFFI]: Found {len(tables)} tables.")
+            
+            results = []
+            for table in tables:
+                rows = table.find_all("tr")
+                # Find date row
+                date_str = None
+                for row in rows:
+                    cells = row.find_all(["td", "th"])
+                    text = " ".join(c.get_text(strip=True) for c in cells)
+                    if "date:" in text.lower():
+                        # Extract 10-character date like 19-03-2026
+                        m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', text)
+                        if m:
+                            date_str = m.group(1)
+                            break
+                
+                if not date_str:
+                    continue
+                
+                for row in rows:
+                    cells = row.find_all(["td", "th"])
+                    if len(cells) < 4:
+                        continue
+                    row_text = " ".join(c.get_text(strip=True) for c in cells)
+                    if not any(kw.lower() in row_text.lower() for kw in self.keywords):
+                        continue
+                    
+                    course = cells[0].get_text(strip=True)
+                    sem = cells[1].get_text(strip=True)
+                    subject = cells[2].get_text(strip=True)
+                    time_text = ""
+                    for c in cells:
+                        t = c.get_text(strip=True)
+                        if re.search(r'\d{1,2}:\d{2}', t):
+                            time_text = t
+                            break
+                    
+                    href = None
+                    link_tag = None
+                    for c in reversed(cells):
+                        a = c.find("a")
+                        if a and a.get("href"):
+                            href = a["href"]
+                            link_tag = a
+                            break
+                    
+                    semester = self.extract_semester_logic(sem or course)
+                    title = f"[{str(date_str)}] {course} Sem {semester}: {subject} ({time_text})"
+                    print(f"[CRAWLER][CFFI CLASS FOUND]: {title}")
+                    results.append({
+                        "title": str(title),
+                        "link": str(href) if href else "#pending",
+                        "semester": str(semester),
+                        "date": self.parse_date(str(date_str)),
+                        "class_time": str(time_text),
+                        "description": f"MBA Live Class: {subject}. Time: {time_text}."
+                    })
+            
+            return results
+        except Exception as e:
+            print(f"[CRAWLER][CFFI][ERROR]: {e}")
+            return []
 
     async def run(self, days_back: int = 15, targets: Optional[List[str]] = None):
         """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
@@ -125,7 +227,16 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V34.0: CONTEXT-LEVEL GHOST FETCH (Playwright Engine)
+                        # V35.0: Try TLS impersonation FIRST (curl_cffi)
+                        cffi_results = await self.fetch_schedule_cffi()
+                        if cffi_results:
+                            self.notices.extend(cffi_results)
+                            print(f"[CRAWLER][CFFI]: SUCCESS! Got {len(cffi_results)} classes.")
+                            return
+                        
+                        print("[CRAWLER][CFFI]: Failed, falling back to Playwright flows...")
+
+                        # V34.0: CONTEXT-LEVEL GHOST FETCH (Playwright Engine - Fallback)
                         print("[CRAWLER]: Initiating CONTEXT-LEVEL GHOST FETCH for Schedule...")
                         
                         try:
