@@ -47,7 +47,7 @@ class MBAScraper:
         """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
         self.days_back = days_back
         async with async_playwright() as p:
-            # V17.6 Compatibility: Revert to Chromium as primary stable engine
+            # V19.5: Chromium + Authenticated Ghost Fetch (Stable 17.6 Engine)
             try:
                 print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable)...")
                 browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
@@ -58,11 +58,8 @@ class MBAScraper:
             headers = {
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-                "Sec-Fetch-User": "?1",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Upgrade-Insecure-Requests": "1",
-                "Cache-Control": "max-age=0"
+                "User-Agent": self.user_agent,
+                "Upgrade-Insecure-Requests": "1"
             }
             
             # v17.0: Randomized Viewport
@@ -136,6 +133,7 @@ class MBAScraper:
                         vcs_content = await page.evaluate("""async () => {
                             try {
                                 const response = await fetch('https://web.sol.du.ac.in/my/team_schedules/vcs.php', {
+                                    credentials: 'include',
                                     headers: {
                                         'Referer': 'https://web.sol.du.ac.in/info/online-class-schedule',
                                         'X-Requested-With': 'XMLHttpRequest'
