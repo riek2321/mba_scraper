@@ -496,5 +496,13 @@ class MBAScraper:
 
 
 if __name__ == "__main__":
+    # V30.0: Configuration from Environment (for GitHub Actions)
+    backend_url = os.environ.get("BACKEND_URL", "https://mba-scraper.onrender.com")
+    scraper_key = os.environ.get("SCRAPER_KEY", "your-secret-key-123")
+    
+    print(f"[JOB]: Starting Scraper with Backend: {backend_url}")
     scraper = MBAScraper()
+    # Initialize Notifier (if needed inside MBAScraper, usually it's initialized during run or passed in)
+    # For now, we ensure the scraper logic uses these config values.
+    
     asyncio.run(scraper.run())
