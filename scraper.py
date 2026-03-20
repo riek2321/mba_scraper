@@ -107,8 +107,8 @@ class MBAScraper:
 
     # --- TLS & FINGERPRINTING ---
     async def fetch_via_tls_rotation(self, url: str) -> Optional[str]:
-        """v70.0: JA3 Fingerprint Rotation + Iframe Spoofing"""
-        ja3_fingerprints = ["chrome120", "chrome110", "safari15", "firefox117"]
+        """v71.1: JA3 Fingerprint Rotation + Iframe Spoofing (Fixing supported fingerprints)"""
+        ja3_fingerprints = ["chrome120", "chrome110", "safari15", "chrome116"]
         selected = random.choice(ja3_fingerprints)
         print(f"[OMNI][TLS]: Using fingerprint {selected}...")
         try:
@@ -371,10 +371,10 @@ class MBAScraper:
                 except Exception as e: print(f"[OMNI][ERROR]: {e}")
             await browser.close()
         return self.notices
-
     async def extract_online_classes(self, page):
-        """V36.0: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
+        """V71.1: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
         print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
+        local_results = []
         
         try:
             # 1. IFRAME DETECTION: Get all iframe srcs from the page
@@ -543,25 +543,26 @@ class MBAScraper:
                         current_date_ist = (now_utc + ist_offset).date()
                         item_date_obj = self._normalize_date(str(date_str))
                         
-                        if item_date_obj and item_date_obj < current_date_ist: continue
-
                         description = f"MBA Live Class: {subject_text}. Time: {time_text}."
-
-                        self.notices.append({
+                        item = {
                             "title": title.strip(),
                             "link": final_link,
                             "semester": semester,
                             "date": self.parse_date(str(date_str)),
                             "class_time": time_text.strip(),
                             "description": description
-                        })
+                        }
+                        local_results.append(item)
+                        self.notices.append(item)
                         print(f"[CRAWLER][CLASS FOUND]: {title}")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Online classes parsing failed: {e}")
+        return local_results
 
     async def extract_legacy_notices(self, page):
         """Parse notices from sol.du.ac.in (legacy) pages"""
         print(f"[CRAWLER]: Extracting legacy notices from {page.url}")
+        local_results = []
         try:
             links = await page.evaluate("""() => {
                 const results = [];
@@ -603,18 +604,22 @@ class MBAScraper:
                     if is_class_related:
                         description = f"MBA Live Class: {text.strip()}"
 
-                    self.notices.append({
+                    item_data = {
                         "title": text.strip(),
                         "link": href,
                         "semester": semester,
                         "date": notice_date.strftime("%Y-%m-%d"),
                         "description": description
-                    })
+                    }
+                    local_results.append(item_data)
+                    self.notices.append(item_data)
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Legacy notices parsing failed: {e}")
+        return local_results
 
     async def extract_mba_content(self, page):
         """v19.3: Turbo Link Extraction (Single Page Evaluate)"""
+        local_results = []
         try:
             # Get all links and texts in one single JS call to avoid 100s of 'awaits'
             link_data = await page.evaluate("""
@@ -642,16 +647,19 @@ class MBAScraper:
                     if is_class_related:
                         description = f"MBA Live Class: {text}"
 
-                    self.notices.append({
+                    item_data = {
                         "title": text,
                         "link": href,
                         "semester": semester,
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                         "description": description
-                    })
+                    }
+                    local_results.append(item_data)
+                    self.notices.append(item_data)
                     print(f"[CRAWLER][FOUND]: {text}")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Turbo extraction failed: {e}")
+        return local_results
 
     def extract_semester_logic(self, text: str) -> str:
         if not text: return "0"
