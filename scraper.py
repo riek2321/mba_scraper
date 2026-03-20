@@ -4,6 +4,8 @@ import re
 import random
 import os
 import json
+import types
+import base64
 from typing import List, Dict, Any, Optional
 
 # Attempted imports for IDE support
@@ -36,396 +38,282 @@ except ImportError:
     pass
 
 class MBAScraper:
+    """v70.0: OMNI-SCRAPER (The Finite Fallback Engine)"""
     def __init__(self, base_url: str = "https://web.sol.du.ac.in/home"):
         self.base_url = base_url
         self.keywords = ['MBA', 'Master of Business Administration']
         self.visited = set()
         self.notices = []
-        self.days_back = 15 # Default
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
-        # v55.0: DIY ScraperAPI (Cloudflare Worker + Stealth Handshake)
-        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
-        self.cf_worker_url = os.environ.get("CF_WORKER_URL", "")
-        self.sol_cookies = os.environ.get("SOL_COOKIES", "")
+        self.days_back = 15
+        self.user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+        ]
+        self.user_agent = random.choice(self.user_agents)
         
-        print(f"[JOB]: Scraping API Key: {'YES' if self.scraper_api_key else 'NO'}")
-        print(f"[JOB]: Cloudflare Worker: {'YES' if self.cf_worker_url else 'NO'}")
-        print(f"[JOB]: Session Cookies: {'YES' if self.sol_cookies else 'NO'}")
-        print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
             "https://sol.du.ac.in/home.php",
-            "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
+            "https://web.sol.du.ac.in/my/team_schedules/vcs.php",
             "https://sol.du.ac.in/all-notices.php"
         ]
 
-    async def fetch_via_cf_worker(self, url: str) -> Optional[str]:
-        """V55.0: Residential-grade bypass via self-hosted Cloudflare Worker"""
-        if not self.cf_worker_url:
-            return None
-            
-        print(f"[CRAWLER][CF]: Proxying request via Worker for {url}...")
-        try:
-            loop = asyncio.get_event_loop()
-            def sync_get(u, cookies):
-                # Pass cookies to Worker via special header to remain stealthy
-                h = {"x-forward-cookie": cookies}
-                return requests.get(u, headers=h, timeout=45)
-                
-            response = await loop.run_in_executor(None, sync_get, f"{self.cf_worker_url}?url={url}", self.sol_cookies)
-            
-            if response.status_code == 200:
-                print(f"[CRAWLER][CF]: Success! Fetched {len(response.text)} chars.")
-                return response.text
-            else:
-                print(f"[CRAWLER][CF]: Worker returned status {response.status_code}")
-                return None
-        except Exception as e:
-            print(f"[CRAWLER][CF][ERROR]: {e}")
-            return None
+        # API Keys - v70.2: Explicit checking
+        self.keys = {
+            "SCRAPER_API": os.environ.get("SCRAPER_API_KEY", ""),
+            "WSAI": os.environ.get("WEBSCRAPING_AI_KEY", ""),
+            "ANT": os.environ.get("SCRAPER_ANT_KEY", ""),
+            "CF_WORKER": os.environ.get("CF_WORKER_URL", "")
+        }
+        
+        for k, v in self.keys.items():
+            if not v: print(f"[OMNI][INFO]: Key {k} is missing. Strategy will be skipped.")
+            else: print(f"[OMNI][INFO]: Key {k} is present.")
+        
 
-    async def fetch_via_api(self, url: str) -> Optional[str]:
-        """V51.0: Level 3 Bypass via Scraping API (Supports ScraperAPI & WebScraping.ai)"""
-        if not self.scraper_api_key:
-            return None
-            
-        print(f"[CRAWLER][API]: Attempting residential proxy fetch for {url}...")
-        try:
-            # v51.0: Detect API provider based on key format
-            # WebScraping.ai keys are UUIDs (36 chars with dashes)
-            is_ws_ai = "-" in self.scraper_api_key
-            
-            if is_ws_ai:
-                # WebScraping.ai format (UUID with dashes)
-                api_url = f"https://api.webscraping.ai/html?url={url}&api_key={self.scraper_api_key}&proxy=residential&render=true"
-            else:
-                # ScraperAPI format (default)
-                api_url = f"http://api.scraperapi.com?api_key={self.scraper_api_key}&url={url}"
-                # Always render JS for vcs.php via ScraperAPI if possible, but keep it efficient
-                if "vcs.php" in url:
-                    api_url += "&render_js=true"
-                else:
-                    api_url += "&render_js=true" # Default to render for better success rate
-                
-            loop = asyncio.get_event_loop()
-            def sync_get(u):
-                # Add Referer to bypass domain-level checks if possible
-                h = {"Referer": "https://sol.du.ac.in/"}
-                return requests.get(u, headers=h, timeout=60)
-                
-            response = await loop.run_in_executor(None, sync_get, api_url)
-            
-            if response.status_code == 200:
-                print(f"[CRAWLER][API]: Success! Fetched {len(response.text)} chars.")
-                return response.text
-            else:
-                # v51.0: Detect and handle WebScraping.ai errors specifically
-                if is_ws_ai and response.status_code == 500:
-                    try:
-                        err_data = response.json()
-                        print(f"[CRAWLER][API]: Target page error: {err_data.get('status_code')} - {err_data.get('message')}")
-                    except Exception: pass
-                print(f"[CRAWLER][API]: Failed with status {response.status_code}")
-                return None
-        except Exception as e:
-            print(f"[CRAWLER][API][ERROR]: {e}")
-            return None
+    # --- ADVANCED STEALTH SENSORS ---
+    async def bezier_mouse_move(self, page, x2, y2):
+        """v70.0: Human-like mouse movement using Bezier curves"""
+        x1, y1 = await page.evaluate("() => [window.innerWidth / 2, window.innerHeight / 2]")
+        # Control points for the curve
+        cx = (x1 + x2) / 2 + random.randint(-100, 100)
+        cy = (y1 + y2) / 2 + random.randint(-100, 100)
+        
+        steps = 25
+        for i in range(steps):
+            t = i / steps
+            # Quadratic Bezier formula: (1-t)^2*P1 + 2(1-t)t*Pc + t^2*P2
+            x = (1-t)**2 * x1 + 2*(1-t)*t * cx + t**2 * x2
+            y = (1-t)**2 * y1 + 2*(1-t)*t * cy + t**2 * y2
+            await page.mouse.move(x, y)
+            if i % 5 == 0: await asyncio.sleep(0.01)
 
-    async def fetch_schedule_cffi(self) -> list:
-        """V35.0: TLS Fingerprint Impersonation via curl_cffi"""
-        print("[CRAWLER][CFFI]: Attempting Chrome TLS impersonation...")
+    async def sensory_hover(self, page, selector):
+        """v70.0: Realistic hover before interaction"""
         try:
-            session = cffi_requests.Session(impersonate="chrome120")
-            
-            # Step 1: Prime session on main portal
-            session.get("https://sol.du.ac.in/home.php", timeout=30)
-            
-            # Step 2: Hit subdomain home
-            session.get("https://web.sol.du.ac.in/home", timeout=30)
-            
-            # Step 3: Fetch the actual schedule page
-            r = session.get(
-                "https://web.sol.du.ac.in/info/online-class-schedule",
-                headers={
-                    "Referer": "https://web.sol.du.ac.in/home",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
-                },
-                timeout=30
-            )
-            
-            print(f"[CRAWLER][CFFI]: Response status: {r.status_code}")
-            
-            if r.status_code == 403:
-                print("[CRAWLER][CFFI]: Still 403. WAF is very aggressive.")
-                return []
-            
-            # Parse the HTML
-            soup = BeautifulSoup(r.text, "html.parser")
-            tables = soup.find_all("table")
-            print(f"[CRAWLER][CFFI]: Found {len(tables)} tables.")
-            
-            results = []
-            for table in tables:
-                rows = table.find_all("tr")
-                # Find date row
-                date_str = None
-                for row in rows:
-                    cells = row.find_all(["td", "th"])
-                    text = " ".join(c.get_text(strip=True) for c in cells)
-                    if "date:" in text.lower():
-                        # Extract 10-character date like 19-03-2026
-                        m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', text)
-                        if m:
-                            date_str = m.group(1)
-                            break
-                
-                if not date_str:
-                    continue
-                
-                for row in rows:
-                    cells = row.find_all(["td", "th"])
-                    if len(cells) < 4:
-                        continue
-                    row_text = " ".join(c.get_text(strip=True) for c in cells)
-                    if not any(kw.lower() in row_text.lower() for kw in self.keywords):
-                        continue
-                    
-                    course = cells[0].get_text(strip=True)
-                    sem = cells[1].get_text(strip=True)
-                    subject = cells[2].get_text(strip=True)
-                    time_text = ""
-                    for c in cells:
-                        t = c.get_text(strip=True)
-                        if re.search(r'\d{1,2}:\d{2}', t):
-                            time_text = t
-                            break
-                    
-                    href = None
-                    link_tag = None
-                    for c in reversed(cells):
-                        a = c.find("a")
-                        if a and a.get("href"):
-                            href = a["href"]
-                            link_tag = a
-                            break
-                    
-                    semester = self.extract_semester_logic(sem or course)
-                    title = f"[{str(date_str)}] {course} Sem {semester}: {subject} ({time_text})"
-                    print(f"[CRAWLER][CFFI CLASS FOUND]: {title}")
-                    results.append({
-                        "title": str(title),
-                        "link": str(href) if href else "#pending",
-                        "semester": str(semester),
-                        "date": self.parse_date(str(date_str)),
-                        "class_time": str(time_text),
-                        "description": f"MBA Live Class: {subject}. Time: {time_text}."
-                    })
-            
-            return results
-        except Exception as e:
-            print(f"[CRAWLER][CFFI][ERROR]: {e}")
-            return []
+            el = page.locator(selector).first
+            box = await el.bounding_box()
+            if box:
+                target_x = box['x'] + box['width']/2 + random.randint(-5, 5)
+                target_y = box['y'] + box['height']/2 + random.randint(-5, 5)
+                await self.bezier_mouse_move(page, target_x, target_y)
+                await asyncio.sleep(random.uniform(0.5, 1.5))
+        except Exception: pass
 
-    async def run(self, days_back: int = 15, targets: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """v19.2: DUAL-ENGINE (Firefox) + LEGACY PROMOTION"""
-        self.days_back = days_back
-        async with async_playwright() as p:
-            # V19.6: Pure Chromium + Natural Navigation (Final Production)
-            print("[CRAWLER]: Launching Chromium Engine (v17.6 Stable Target)...")
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-infobars',
-                    '--window-position=0,0',
-                    '--ignore-certifcate-errors',
-                    '--ignore-certifcate-errors-spki-list'
-                ]
-            )
-            
+    # --- TLS & FINGERPRINTING ---
+    async def fetch_via_tls_rotation(self, url: str) -> Optional[str]:
+        """v70.0: JA3 Fingerprint Rotation + Iframe Spoofing"""
+        ja3_fingerprints = ["chrome120", "chrome110", "safari15", "firefox117"]
+        selected = random.choice(ja3_fingerprints)
+        print(f"[OMNI][TLS]: Using fingerprint {selected}...")
+        try:
             headers = {
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "User-Agent": self.user_agent,
+                "User-Agent": random.choice(self.user_agents),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-IN,en;q=0.9",
+                "Referer": "https://web.sol.du.ac.in/home",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Fetch-User": "?1",
                 "Upgrade-Insecure-Requests": "1"
             }
-            
-            viewports = [
-                {'width': 1366, 'height': 768},
-                {'width': 1536, 'height': 864},
-                {'width': 1920, 'height': 1080}
-            ]
-            
-            context = await browser.new_context(
-                user_agent=self.user_agent,
-                extra_http_headers=headers,
-                viewport=random.choice(viewports)
-            )
-            page = await context.new_page()
-            
-            try:
-                await stealth_async(page)
-                print("[CRAWLER]: Stealth signatures applied.")
-            except Exception: pass
+            if "vcs.php" in url:
+                headers.update({"Sec-Fetch-Dest": "iframe"})
+            session = cffi_requests.Session(impersonate=selected)
+            r = session.get(url, headers=headers, timeout=30)
+            if r.status_code == 200: return r.text
+            return None
+        except Exception as e:
+            print(f"[OMNI][TLS][ERROR]: {e}")
+            return None
 
-            print("[CRAWLER]: Priming NATURAL NAVIGATION Session...")
-            try:
-                # Step 0: Main portal
-                print("[CRAWLER][PRIMER]: Visiting Main Portal...")
-                await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=120000)
-                await asyncio.sleep(2)
+    async def ghost_fetch(self, context, url: str) -> Optional[str]:
+        """v70.0: Ghost Fetch via Playwright Request Context"""
+        print(f"[OMNI][GHOST]: Attempting Ghost fetch for {url}...")
+        try:
+            headers = {
+                "Referer": "https://web.sol.du.ac.in/home",
+                "Sec-Fetch-Dest": "iframe" if "vcs.php" in url else "document"
+            }
+            response = await context.request.get(url, headers=headers)
+            if response.status == 200:
+                t = await response.text()
+                return t
+            return None
+        except Exception: return None
 
-                # Step 1: Subdomain Home
-                print("[CRAWLER][PRIMER]: Visiting Subdomain Home...")
-                await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=120000)
-                await asyncio.sleep(3)
+    # --- EXOTIC FALLBACKS ---
+    async def fetch_via_wayback(self, url: str) -> Optional[str]:
+        """v70.0: Wayback Machine API (When site is 403)"""
+        print(f"[OMNI][WAYBACK]: Checking archives for {url}...")
+        try:
+            api_url = f"http://archive.org/wayback/available?url={url}"
+            loop = asyncio.get_event_loop()
+            def get_json(u): return requests.get(u).json()
+            r_resp = await loop.run_in_executor(None, get_json, api_url)
+            snapshot = r_resp.get("archived_snapshots", {}).get("closest", {}).get("url")
+            if snapshot:
+                print(f"[OMNI][WAYBACK]: Snapshot found: {snapshot}")
+                resp = await loop.run_in_executor(None, requests.get, snapshot)
+                return resp.text
+            return None
+        except Exception: return None
+
+    async def fetch_via_google_cache(self, url: str) -> Optional[str]:
+        """v70.0: Google Cache Fetch"""
+        cache_url = f"http://webcache.googleusercontent.com/search?q=cache:{url}"
+        print(f"[OMNI][CACHE]: Checking Google Cache...")
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u):
+                return requests.get(u, timeout=20)
+            r = await loop.run_in_executor(None, sync_get, cache_url)
+            if r.status_code == 200: return r.text
+            return None
+        except Exception: return None
+
+    async def fetch_via_scraperant(self, url: str) -> Optional[str]:
+        """V70.0: ScraperAnt (10,000 free credits/mo)"""
+        if not self.keys["ANT"]: return None
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u, k):
+                api_url = f"https://api.scraperant.com/v2/general?url={u}&x-api-key={k}&browser=true"
+                return requests.get(api_url, timeout=60)
+            response = await loop.run_in_executor(None, sync_get, url, self.keys["ANT"])
+            return response.text if response.status_code == 200 else None
+        except Exception: return None
+
+    async def fetch_via_webscraping_ai(self, url: str) -> Optional[str]:
+        if not self.keys["WSAI"]: return None
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u, k):
+                api_url = f"https://api.webscraping.ai/html?url={u}&api_key={k}&proxy=residential&render=true"
+                return requests.get(api_url, timeout=60)
+            response = await loop.run_in_executor(None, sync_get, url, self.keys["WSAI"])
+            return response.text if response.status_code == 200 else None
+        except Exception: return None
+
+    # [DELETE] fetch_via_zyte - Removed per user request v70.1
+
+    # --- BRIDGE & API FETCHER ---
+    async def bridge_fetch(self, context, url: str) -> Optional[str]:
+        """v70.0: Chained Bridge Fetching Logic"""
+        strategies = [
+            ("GHOST", lambda u: self.ghost_fetch(context, u)),
+            ("TLS_ROTATION", self.fetch_via_tls_rotation),
+            ("GOOGLE_CACHE", self.fetch_via_google_cache),
+            ("WAYBACK", self.fetch_via_wayback),
+        ]
+        
+        # Add API strategies if keys exist
+        if self.keys["SCRAPER_API"]: strategies.append(("SCRAPERAPI", self.fetch_via_api))
+        if self.keys["ANT"]: strategies.append(("SCRAPER_ANT", self.fetch_via_scraperant))
+        if self.keys["WSAI"]: strategies.append(("WEBSCRAPING_AI", self.fetch_via_webscraping_ai))
+        
+        for name, func in strategies:
+            print(f"[OMNI][CHAIN]: Trying {name}...")
+            try:
+                # Handle both async and sync strategies
+                if name == "GHOST":
+                    # For GHOST, the lambda handles the await internal to bridge_fetch call but we didn't await it there
+                    html = await self.ghost_fetch(context, url)
+                else:
+                    html = await func(url)
                 
-                # V17.5 Natural Navigation: Click via UI instead of direct jump
-                print("[CRAWLER][PRIMER]: Clicking 'Student Support' (Natural Flow)...")
-                try:
-                    # Look for links that might lead to support/classes
-                    await page.locator("text='Student Support'").first.click(timeout=10000)
-                    await asyncio.sleep(2)
-                except Exception:
-                    # Fallback to direct jump if click fails, but prefer click
-                    await page.goto("https://web.sol.du.ac.in/info/student-support", wait_until="domcontentloaded", timeout=60000)
-            except Exception as e: 
-                print(f"[CRAWLER][PRIMER][WARNING]: Natural flow warning: {e}")
+                if html: return html
+            except Exception as e:
+                print(f"[OMNI][CHAIN][ERROR]: {name} failed: {e}")
+        return None
 
-            # v15.0: REQUEST INTERCEPTION (Bypass 403)
-            async def intercept_vcs(route):
-                h = {**route.request.headers}
-                h["Referer"] = "https://web.sol.du.ac.in/info/online-class-schedule"
-                await route.continue_(headers=h)
+    async def fetch_via_cf_worker(self, url: str) -> Optional[str]:
+        if not self.keys["CF_WORKER"]: return None
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u):
+                return requests.get(u, timeout=45)
+            r = await loop.run_in_executor(None, sync_get, f"{self.keys['CF_WORKER']}?url={url}")
+            return r.text if r.status_code == 200 else None
+        except Exception: return None
+
+    async def fetch_via_api(self, url: str) -> Optional[str]:
+        if not self.keys["SCRAPER_API"]: return None
+        api_url = f"http://api.scraperapi.com?api_key={self.keys['SCRAPER_API']}&url={url}&render_js=true"
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u):
+                return requests.get(u, timeout=60)
+            r = await loop.run_in_executor(None, sync_get, api_url)
+            return r.text if r.status_code == 200 else None
+        except Exception: return None
+
+    # --- HUMAN NAVIGATION ENGINE ---
+    async def stealth_navigate_flow(self, page) -> bool:
+        """v70.0: Complex, randomized human workflow"""
+        print("[OMNI][STEALTH]: Initiating human-sensory navigation...")
+        try:
+            # Step 1: Home page visit
+            await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded")
+            await self.sensory_hover(page, "text='Academic'") 
+            await asyncio.sleep(random.uniform(2, 4))
             
-            await context.route("**/vcs.php", intercept_vcs)
+            # Step 2: Random reading scroll
+            for _ in range(3):
+                await page.mouse.wheel(0, random.randint(300, 700))
+                await asyncio.sleep(random.uniform(1, 2))
+                
+            # Step 3: Click through to support
+            support_link = "text='Student Support'"
+            await self.sensory_hover(page, support_link)
+            await page.locator(support_link).first.click()
+            await asyncio.sleep(3)
+            
+            # Step 4: Final Target transition
+            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="networkidle")
+            if "Forbidden" in await page.content(): return False
+            return True
+        except Exception: return False
+
+    async def run(self, days_back: int = 15, targets: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        self.days_back = days_back
+        async with async_playwright() as p:
+            print("[OMNI]: Launching Master Stealth Browser...")
+            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-blink-features=AutomationControlled'])
+            context = await browser.new_context(user_agent=self.user_agent, viewport={'width': 1920, 'height': 1080})
+            page = await context.new_page()
+            try: await stealth_async(page); print("[OMNI]: Stealth active.")
+            except Exception: pass
 
             actual_targets = targets if targets else self.targets
-            print(f"[CRAWLER]: Starting scan of {len(actual_targets)} target areas sequentially")
-
             for url in actual_targets:
                 try:
-                    print(f"[CRAWLER][DIRECT]: Visiting target {url}")
-                    
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V55.0: DIY ScraperAPI (Try FIRST)
-                        if self.cf_worker_url:
-                            cf_html = await self.fetch_via_cf_worker(url)
-                            if cf_html:
-                                try:
-                                    api_page = await context.new_page()
-                                    await api_page.set_content(cf_html)
-                                    await self.extract_online_classes(api_page)
-                                    await api_page.close()
-                                    print("[CRAWLER][CF]: SUCCESS! Data extracted via DIY Proxy.")
-                                    return self.notices
-                                except Exception as e:
-                                    print(f"[CRAWLER][CF][ERROR]: Extraction failed: {e}")
-
-                        # V50.0: Level 3 Bypass (Paid Scraping API) - Try SECOND
-                        if self.scraper_api_key:
-                            api_html = await self.fetch_via_api(url)
-                            if api_html:
-                                try:
-                                    # Create a temporary page to reuse extraction logic
-                                    api_page = await context.new_page()
-                                    await api_page.set_content(api_html)
-                                    await self.extract_online_classes(api_page)
-                                    await api_page.close()
-                                    print("[CRAWLER][API]: SUCCESS! Data extracted via residential proxy.")
-                                    return self.notices
-                                except Exception as e:
-                                    print(f"[CRAWLER][API][ERROR]: Extraction failed: {e}")
-
-                        # V35.0: Try TLS impersonation (Fallback)
-                        cffi_results = await self.fetch_schedule_cffi()
-                        if cffi_results:
-                            self.notices.extend(cffi_results)
-                            print(f"[CRAWLER][CFFI]: SUCCESS! Got {len(cffi_results)} classes.")
-                            return self.notices
+                        # Strategy 1: BridgeChain (Ghost, TLS, Cache, Wayback, APIs)
+                        html = await self.bridge_fetch(context, url)
+                        if html:
+                            print("[OMNI][SUCCESS]: Data obtained via BridgeChain.")
+                            temp_page = await context.new_page()
+                            await temp_page.set_content(html)
+                            await self.extract_online_classes(temp_page)
+                            await temp_page.close()
+                            continue
                         
-                        print("[CRAWLER][CFFI]: Failed, falling back to Playwright flows...")
-
-                        # V38.0: IFRAME-HEADER GHOST FETCH
-                        # Key insight: server checks sec-fetch-dest: iframe + AWSALB sticky session
-                        print("[CRAWLER]: Initiating IFRAME-HEADER GHOST FETCH for Schedule...")
-                        
-                        try:
-                            # 1. Visit parent page first to acquire AWSALB + PHPSESSID cookies
-                            print("[CRAWLER][GHOST]: Acquiring session cookies via parent page...")
-                            await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="networkidle", timeout=60000)
-                            await asyncio.sleep(5)
-                            
-                            # 2. Use context.request with EXACT iframe headers from real browser
-                            print("[CRAWLER][GHOST]: Executing iframe-spoofed request to vcs.php...")
-                            response = await context.request.get(
-                                "https://web.sol.du.ac.in/my/team_schedules/vcs.php",
-                                headers={
-                                    "referer": "https://web.sol.du.ac.in/info/online-class-schedule",
-                                    "sec-fetch-dest": "iframe",
-                                    "sec-fetch-mode": "navigate",
-                                    "sec-fetch-site": "same-origin",
-                                    "upgrade-insecure-requests": "1",
-                                    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                                    "accept-language": "en-IN,en;q=0.9,hi;q=0.8",
-                                }
-                            )
-                            
-                            print(f"[CRAWLER][GHOST]: Response status: {response.status}")
-                            if response.ok:
-                                print("[CRAWLER][GHOST]: Fetch SUCCESS. Parsing content.")
-                                html_content = await response.text()
-                                ghost_page = await context.new_page()
-                                await ghost_page.set_content(html_content)
-                                await self.extract_online_classes(ghost_page)
-                                await ghost_page.close()
-                                return self.notices
-                            else:
-                                print(f"[CRAWLER][GHOST][WARNING]: Ghost fetch failed with status {response.status}. Falling back to click flow.")
-                        except Exception as e:
-                            print(f"[CRAWLER][GHOST][ERROR]: Ghost protocol failed: {e}. Falling back to click flow.")
-
-                        # V27.0: ULTIMATE CLICK-THROUGH BYPASS (Restored as Fallback)
-                        print("[CRAWLER]: Executing Click-Through Bypass for Schedule...")
-                        try:
-                            # 1. Start at Subdomain Home (to drop session cookies)
-                            print("[CRAWLER][BYPASS]: Visiting Subdomain Home (home.php)...")
-                            await page.goto("https://sol.du.ac.in/home.php", wait_until="networkidle", timeout=60000)
-                            await asyncio.sleep(3)
-                            
-                            # 2. Click 'Online Class Schedule' link and CAPTURE NEW PAGE
-                            link_selector = "a:has-text('Online Class Schedule')"
-                            await page.wait_for_selector(link_selector, timeout=20000)
-                            
-                            async with context.expect_page(timeout=30000) as new_page_info:
-                                await page.click(link_selector)
-                            target_page = await new_page_info.value
-                            
-                            print("[CRAWLER][BYPASS]: Captured NEW TAB. Parsing...")
-                            await target_page.wait_for_load_state("load", timeout=60000)
-                            await asyncio.sleep(5)
-                            await self.extract_online_classes(target_page)
-                            return self.notices
-                        except Exception as e:
-                            print(f"[CRAWLER][BYPASS][ERROR]: Click Flow failed: {e}.")
+                        # Strategy 2: Sensory Human Flow (Direct)
+                        if await self.stealth_navigate_flow(page):
+                            await self.extract_online_classes(page)
+                            continue
+                    elif "home.php" in url:
+                        await page.goto(url, wait_until="domcontentloaded")
+                        # v70.2: Extract Important Links specifically for home.php
+                        await self.extract_legacy_notices(page)
                     else:
-                        await page.goto(url, wait_until="domcontentloaded", timeout=90000)
-                        await asyncio.sleep(random.uniform(2, 5))
-                        await self.expand_content(page)
-                        await self.auto_scroll(page)
-                        
-                        if "sol.du.ac.in" in url and ("all-notices" in url or "home.php" in url):
-                            await self.extract_legacy_notices(page)
-                        
+                        await page.goto(url, wait_until="domcontentloaded")
                         await self.extract_mba_content(page)
-                except Exception as e:
-                    print(f"[CRAWLER][ERROR]: Failed to visit {url}: {e}")
-
-            try:
-                await getattr(browser, "close")()
-            except Exception: pass
-            
+                except Exception as e: print(f"[OMNI][ERROR]: {e}")
+            await browser.close()
         return self.notices
 
     async def extract_online_classes(self, page):
@@ -527,7 +415,8 @@ class MBAScraper:
                 # 1. FIND DATE FOR THIS TABLE
                 date_str = None
                 for row in rows:
-                    combined = " ".join([c['text'] for c in row]) # type: ignore
+                    if not row: continue
+                    combined = " ".join([c.get('text', '') for c in row if c and isinstance(c, dict)]) # type: ignore
                     # Case insensitive date search
                     if 'date:' in combined.lower():
                         # Extract 10-character date like 19-03-2026
@@ -548,8 +437,8 @@ class MBAScraper:
                     
                 # 2. EXTRACT CLASSES
                 for cells in rows: 
-                    if len(cells) < 4: continue
-                    row_text = " ".join([c['text'] for c in cells]) # type: ignore
+                    if not cells or len(cells) < 4: continue
+                    row_text = " ".join([c.get('text', '') for c in cells if c and isinstance(c, dict)]) # type: ignore
                     if not any(kw.lower() in row_text.lower() for kw in self.keywords):
                         continue
                         
@@ -744,22 +633,8 @@ class MBAScraper:
         try: return dparser.parse(date_str, fuzzy=True).date()
         except Exception: return None
 
-    def parse_date(self, date_str: str) -> str:
-        obj = self._normalize_date(date_str)
-        return obj.strftime("%Y-%m-%d") if obj else datetime.datetime.now().strftime("%Y-%m-%d")
-
-    async def expand_content(self, page):
-        expand_selectors = ["text='Show More'", "text='View All'", "text='View More'", ".btn-show-more"]
-        for selector in expand_selectors:
-            try:
-                btns = await page.locator(selector).all()
-                for btn in btns:
-                    if await btn.is_visible():
-                        await btn.click()
-                        await asyncio.sleep(1)
-            except Exception: continue
-
     async def auto_scroll(self, page):
+        """Scroll for dynamic content loading"""
         try:
             await page.evaluate("""async () => {
                 await new Promise((resolve) => {
@@ -769,38 +644,95 @@ class MBAScraper:
                         let scrollHeight = document.body.scrollHeight;
                         window.scrollBy(0, distance);
                         totalHeight += distance;
-                        if(totalHeight >= scrollHeight){ clearInterval(timer); resolve(); }
+                        if(totalHeight >= scrollHeight){
+                            clearInterval(timer);
+                            resolve();
+                        }
                     }, 100);
                 });
             }""")
             await asyncio.sleep(2)
         except Exception: pass
 
+    def parse_date(self, date_str: str) -> str:
+        obj = self._normalize_date(date_str)
+        return obj.strftime("%Y-%m-%d") if obj else datetime.datetime.now().strftime("%Y-%m-%d")
+
+    def sync_results(self, results: List[Dict[str, Any]], notifier: 'Notifier', memory_file: str):
+        """v70.2: Smart-Sync with Memory Protection"""
+        synced_memory: set = set()
+        if os.path.exists(memory_file):
+            try:
+                with open(memory_file, 'r') as f:
+                    data = json.load(f)
+                    if isinstance(data, list): synced_memory = set(data)
+            except Exception: pass
+
+        print(f"[JOB]: Processing {len(results)} scraped items...")
+        for sem in ["1", "2", "3", "4", "0"]:
+            existing_items = notifier.get_from_website(sem)
+            current_results = [r for r in results if r.get('semester') == sem]
+            
+            now_ist = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=5, minutes=30)
+            today_str = now_ist.strftime("%Y-%m-%d")
+            
+            # 1. Cleanup old
+            for ext in existing_items:
+                ext_date = ext.get('date', '')
+                if ext_date and ext_date < today_str:
+                    notifier.delete_from_website(sem, ext.get('id', ext.get('_id')))
+
+            # 2. Smart Sync
+            for item in current_results:
+                title = str(item.get('title', ''))
+                date = str(item.get('date', ''))
+                item_hash = base64.b64encode(f"{title}{date}".encode()).decode()
+                
+                matching_ext = next((e for e in existing_items if e.get('title') == title and e.get('date') == date), None)
+                
+                if matching_ext:
+                    ext_id = matching_ext.get('id', matching_ext.get('_id'))
+                    ext_link = str(matching_ext.get('link', ''))
+                    if ("pending" in ext_link or "soon" in ext_link.lower()) and "teams.microsoft" in str(item.get('link', '')):
+                        notifier.update_on_website(sem, ext_id, item)
+                    synced_memory.add(item_hash)
+                else:
+                    if item_hash in synced_memory:
+                        continue
+                    if notifier.sync_to_website(item):
+                        synced_memory.add(item_hash)
+
+        with open(memory_file, 'w') as f:
+            json.dump(list(synced_memory), f)
+
+    async def expand_content(self, page):
+        """Click 'Load More' or 'View All' if present"""
+        try:
+            selectors = ["text='Load More'", "text='View All'", "button:has-text('More')", ".btn-show-more"]
+            for sel in selectors:
+                try:
+                    btns = await page.locator(sel).all()
+                    for btn in btns:
+                        if await btn.is_visible():
+                            await btn.click()
+                            await asyncio.sleep(2)
+                except Exception: continue
+        except Exception: pass
+
 
 if __name__ == "__main__":
-    # V30.0: Configuration from Environment (for GitHub Actions)
     backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
     scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
-    print(f"[JOB]: Starting Scraper with Backend: {backend_url}")
+    print(f"[JOB]: Starting Omni-Scraper v70.2 | Backend: {backend_url}")
     scraper = MBAScraper()
-    # Initialize Notifier (if needed inside MBAScraper, usually it's initialized during run or passed in)
-    # For now, we ensure the scraper logic uses these config values.
+    notifier = Notifier(backend_url, scraper_key)
     
     try:
-        # Re-run the scraper and sync results
-        results: list = asyncio.run(scraper.run())
-        if results and isinstance(results, list):
-            print(f"[JOB]: Syncing {len(results)} items to backend...")
-            notifier = Notifier(backend_url, scraper_key)
-            for item in results:
-                try:
-                    success = notifier.sync_to_website(item)
-                    status = "SUCCESS" if success else "FAILED"
-                    print(f"[JOB][SYNC]: {status} | {item['title']}")
-                except Exception as e:
-                    print(f"[JOB][SYNC][ERROR]: {e}")
+        results = asyncio.run(scraper.run())
+        if results:
+            scraper.sync_results(results, notifier, "synced_ids.json")
         else:
-            print("[JOB]: No new items to sync.")
+            print("[JOB]: No new items to process.")
     except Exception as e:
         print(f"[JOB][FATAL]: {e}")

@@ -30,6 +30,9 @@ jobs:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
+          SCRAPER_ANT_KEY: ${{ secrets.SCRAPER_ANT_KEY }}
+          WEBSCRAPING_AI_KEY: ${{ secrets.WEBSCRAPING_AI_KEY }}
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
           SOL_COOKIES: ${{ secrets.SOL_COOKIES }}
         run: |
