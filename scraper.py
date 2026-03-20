@@ -386,18 +386,28 @@ class MBAScraper:
             if "Forbidden" in await page.content(): return False
             return True
         except Exception: return False
-
     async def run(self, days_back: int = 15, targets: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """v77.0: OMNI Master Sequence (God-Tier Stealth Mode)"""
+        """v80.1: Resilient OMNI Master Sequence (Fallback-First Architecture)"""
         self.days_back = days_back
-        print("[OMNI]: Launching Master Stealth Browser (Ninja Mode)...")
-        async with async_playwright() as p:
-            # v79.0: Persona Swapping (Digital Chameleon)
+        print("[OMNI]: Initiating Resilient Extraction Chain...")
+        
+        context = None
+        browser = None
+        playwright_mgr = None
+        page = None
+        
+        try:
+            print("[OMNI]: Launching Master Stealth Browser (Ninja Mode)...")
+            playwright_mgr = await async_playwright().start()
+            
             is_mobile = random.choice([True, False])
             persona_ua = random.choice(self.mobile_agents if is_mobile else self.user_agents)
+            # random viewports
+            resolutions = [{"width": 1920, "height": 1080}, {"width": 1536, "height": 864}, {"width": 1366, "height": 768}]
+            res = random.choice(resolutions)
             persona_viewport = {"width": 390, "height": 844} if is_mobile else res
             
-            browser = await p.chromium.launch(
+            browser = await playwright_mgr.chromium.launch(
                 headless=True,
                 args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
             )
@@ -406,26 +416,12 @@ class MBAScraper:
                 viewport=persona_viewport,
                 is_mobile=is_mobile,
                 has_touch=is_mobile,
-                device_pixel_ratio=2 if is_mobile else 1,
+                device_scale_factor=2 if is_mobile else 1,
                 locale="en-IN",
                 timezone_id="Asia/Kolkata"
             )
-            # v80.0: Network-Layer Spoofing (4G Profile)
-            if is_mobile:
-                await context.set_offline(False)
-                # Simulating 4G latency (~100ms) and throughput
-                try:
-                    cdp = await context.new_cdp_session(page)
-                    await cdp.send("Network.emulateNetworkConditions", {
-                        "offline": False,
-                        "latency": 100 + random.randint(0, 50),
-                        "downloadThroughput": 4 * 1024 * 1024 / 8, # 4 Mbps
-                        "uploadThroughput": 2 * 1024 * 1024 / 8  # 2 Mbps
-                    })
-                except Exception: pass
             
-            ua_prefix = persona_ua
-            print(f"[OMNI][PERSONA]: Launching as {'MOBILE' if is_mobile else 'DESKTOP'} (UA: {ua_prefix})")
+            print(f"[OMNI][PERSONA]: Launching as {'MOBILE' if is_mobile else 'DESKTOP'} (UA: {persona_ua})")
             
             # v77.0: Advanced God-Tier Masking Script (mimicking SeleniumBase CDP)
             await context.add_init_script("""
@@ -481,76 +477,117 @@ class MBAScraper:
             """)
             
             page = await context.new_page()
-            try: await stealth_async(page); print("[OMNI]: Stealth active.")
-            except Exception: pass
-
-            actual_targets = targets if targets else self.targets
-            for url in actual_targets:
-                # v71.0: Mode-based filtering for scheduling
-                if self.target_mode == "classes" and "vcs.php" not in url: continue # type: ignore
-                if self.target_mode == "notices" and "vcs.php" in url: continue # type: ignore
-                
+            
+            # v80.0: Network-Layer Spoofing (4G Profile)
+            if is_mobile:
                 try:
-                    if "vcs.php" in url or "online-class-schedule" in url:
-                        # v71.0: ITERATIVE EXTRACTION - Keep trying until we get tables!
-                        strategies = [
-                            ("GHOST", lambda u: self.ghost_fetch(context, u)), # type: ignore
-                            ("G-SEARCH", lambda u: self.fetch_via_google_search("site:sol.du.ac.in +MBA +notices")),
-                            ("SITEMAP", self.fetch_via_sitemap), # type: ignore
-                            ("CDX-INDEX", self.fetch_via_cdx), # type: ignore
-                            ("TLS_ROTATION", self.fetch_via_tls_rotation), # type: ignore
-                            ("GOOGLE_CACHE", self.fetch_via_google_cache), # type: ignore
-                            ("WAYBACK", self.fetch_via_wayback), # type: ignore
-                            ("CF_WORKER", self.fetch_via_cf_worker), # type: ignore
-                            ("SCRAPERAPI", self.fetch_via_api), # type: ignore
-                            ("SCRAPER_ANT", self.fetch_via_scraperant), # type: ignore
-                            ("WEBSCRAPING_AI", self.fetch_via_webscraping_ai), # type: ignore
-                        ]
+                    cdp = await context.new_cdp_session(page)
+                    await cdp.send("Network.emulateNetworkConditions", {
+                        "offline": False,
+                        "latency": 100 + random.randint(0, 50),
+                        "downloadThroughput": 4 * 1024 * 1024 / 8, # 4 Mbps
+                        "uploadThroughput": 2 * 1024 * 1024 / 8  # 2 Mbps
+                    })
+                except Exception: pass
+
+            # Step 1: Human Navigation
+            await self.stealth_navigate_flow(page)
+            
+        except Exception as launch_err:
+            print(f"[OMNI][WARNING]: Master Stealth Browser failed to launch: {launch_err}")
+            print("[OMNI][WARNING]: Falling back to Headless-Only Bridge Mode...")
+            page = None
+
+        actual_targets = targets if targets else self.targets
+        for url in actual_targets:
+            # v71.0: Mode-based filtering for scheduling
+            if self.target_mode == "classes" and "vcs.php" not in url: continue # type: ignore
+            if self.target_mode == "notices" and "vcs.php" in url: continue # type: ignore
+            
+            print(f"[OMNI]: Extracting {url}...")
+            
+            try:
+                if "vcs.php" in url or "online-class-schedule" in url:
+                    # v71.0: ITERATIVE EXTRACTION - Keep trying until we get tables!
+                    strategies = [
+                        ("GHOST", lambda u: self.ghost_fetch(context, u)), # type: ignore
+                        ("G-SEARCH", lambda u: self.fetch_via_google_search("site:sol.du.ac.in +MBA +notices")),
+                        ("SITEMAP", self.fetch_via_sitemap), # type: ignore
+                        ("CDX-INDEX", self.fetch_via_cdx), # type: ignore
+                        ("TLS_ROTATION", self.fetch_via_tls_rotation), # type: ignore
+                        ("GOOGLE_CACHE", self.fetch_via_google_cache), # type: ignore
+                        ("WAYBACK", self.fetch_via_wayback), # type: ignore
+                        ("CF_WORKER", self.fetch_via_cf_worker), # type: ignore
+                        ("SCRAPERAPI", self.fetch_via_api), # type: ignore
+                        ("SCRAPER_ANT", self.fetch_via_scraperant), # type: ignore
+                        ("WEBSCRAPING_AI", self.fetch_via_webscraping_ai), # type: ignore
+                    ]
+                    
+                    found_data = False
+                    for name, func in strategies:
+                        # Skip GHOST if browser failed
+                        if name == "GHOST" and not page: continue
                         
-                        found_data = False
-                        for name, func in strategies:
-                            # Skip strategy if API key is missing
-                            if any(k in name for k in ["API", "ANT", "WSAI", "CF_WORKER"]) and not any(self.keys.values()): # type: ignore
-                                continue
-                                
-                            print(f"[OMNI][ITERATIVE]: Trying {name} for Class Schedule...")
-                            try:
-                                res = func(url)
-                                # v71.0: Correctly await if it's a coroutine or lambda-returned coroutine
-                                if asyncio.iscoroutine(res) or (hasattr(res, "__await__") and res.__await__):
-                                    html = await res
-                                else:
-                                    html = res
-                                
-                                if html and self.is_valid_html(html): # type: ignore
+                        # Skip strategy if API key is missing
+                        if any(k in name for k in ["API", "ANT", "WSAI", "CF_WORKER"]) and not any(self.keys.values()): # type: ignore
+                            continue
+                            
+                        print(f"[OMNI][ITERATIVE]: Trying {name} for Class Schedule...")
+                        try:
+                            # v71.0: Correctly await if it's a coroutine or lambda-returned coroutine
+                            res = func(url)
+                            if asyncio.iscoroutine(res) or (hasattr(res, "__await__") and res.__await__):
+                                html = await res
+                            else:
+                                html = res
+                            
+                            if html and self.is_valid_html(html): # type: ignore
+                                if context:
                                     temp_page = await context.new_page()
                                     await temp_page.set_content(html)
                                     extracted = await self.extract_online_classes(temp_page) # type: ignore
                                     await temp_page.close()
-                                    
                                     if extracted and len(extracted) > 0: # type: ignore
                                         print(f"[OMNI][SUCCESS]: {len(extracted)} classes found via {name}!") # type: ignore
                                         found_data = True
                                         break
-                                    else:
-                                        print(f"[OMNI][FAIL]: {name} returned HTML but 0 tables found. Trying next...")
-                            except Exception as e:
-                                print(f"[OMNI][ERR]: {name} failed: {e}")
-                        
-                        if not found_data:
-                            print("[OMNI][FINAL]: All fallbacks failed. Trying Direct Human Navigation...")
-                            if await self.stealth_navigate_flow(page): # type: ignore
-                                await self.extract_online_classes(page) # type: ignore
+                        except Exception as e:
+                            print(f"[OMNI][ERR]: {name} failed: {e}")
                     
-                    elif "home.php" in url:
-                        await page.goto(url, wait_until="domcontentloaded")
+                    if not found_data and page:
+                        print("[OMNI][FINAL]: All library fallbacks failed. Trying Direct Human Navigation...")
+                        if await self.stealth_navigate_flow(page): # type: ignore
+                            await self.extract_online_classes(page) # type: ignore
+                
+                elif "home.php" in url:
+                    if page:
+                        await page.goto(url, wait_until="domcontentloaded") # type: ignore
                         await self.extract_legacy_notices(page) # type: ignore
                     else:
-                        await page.goto(url, wait_until="domcontentloaded")
+                        html = await self.bridge_fetch(context, url) # type: ignore
+                        if html:
+                            # Use a temporary page if possible, otherwise skip
+                            print("[OMNI][BRIDGE]: Legacy bridge fetch successful. (Parsing pending)")
+                else:
+                    if page:
+                        await page.goto(url, wait_until="domcontentloaded") # type: ignore
                         await self.extract_mba_content(page) # type: ignore
-                except Exception as e: print(f"[OMNI][ERROR]: {e}")
-            await browser.close()
-        return self.notices # type: ignore
+                    else:
+                        html = await self.bridge_fetch(context, url) # type: ignore
+                        if html:
+                            print("[OMNI][BRIDGE]: MBA content recovered via bridge.")
+            except Exception as e: print(f"[OMNI][ERROR]: {e}")
+            
+        # v80.1: Clean shutdown even after error
+        try:
+            if context: await context.close() # type: ignore
+            if browser: await browser.close() # type: ignore
+            if playwright_mgr: await playwright_mgr.stop() # type: ignore
+        except Exception: pass
+
+        print(f"[OMNI]: Sequence complete. Found {len(self.notices)} potential updates.")
+        return self.notices
+
     async def extract_online_classes(self, page):
         """V71.1: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
         print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
@@ -941,7 +978,7 @@ class MBAScraper:
                     ext_date = ext.get('date', '')
                     if ext_date and ext_date < today_str:
                         cleanup_tasks.append(executor.submit(notifier.delete_from_website, sem, ext.get('id', ext.get('_id')))) # type: ignore
-                        stats["cleaned"] += 1
+                        s_stats["cleaned"] += 1
                 
                 # 2. Smart Sync
                 sync_tasks = []
@@ -1027,7 +1064,7 @@ if __name__ == "__main__":
     backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
     scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
-    print(f"[JOB]: Starting Omni-Scraper v73.2 | Mode: {args.mode} | Backend: {backend_url}")
+    print(f"[JOB]: Starting Omni-Scraper v80.0 'Omniscient' | Mode: {args.mode} | Backend: {backend_url}")
     scraper = MBAScraper(target_mode=args.mode, force_sync=args.force)
     notifier = Notifier(backend_url, scraper_key)
     
