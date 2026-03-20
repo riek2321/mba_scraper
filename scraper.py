@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import datetime
 import re
@@ -11,23 +12,13 @@ import argparse
 from typing import List, Dict, Any, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
-# Attempted imports for IDE support
+# Unified Imports 
 try:
-    from playwright.async_api import async_playwright, Page, BrowserContext # type: ignore
-except ImportError:
-    pass
-
-try:
-    import dateutil.parser as dparser # type: ignore
-except ImportError:
-    pass
-
-try:
+    from playwright.async_api import async_playwright, Page, BrowserContext, request # type: ignore
     from playwright_stealth import stealth_async # type: ignore
 except ImportError:
     pass
 
-# Internal project import
 try:
     from notifier import Notifier # type: ignore
 except ImportError:
@@ -37,13 +28,15 @@ try:
     import requests # type: ignore
     from curl_cffi import requests as cffi_requests # type: ignore
     from bs4 import BeautifulSoup # type: ignore
+    import dateutil.parser as dparser # type: ignore
 except ImportError:
     pass
 
 class MBAScraper:
     """v70.0: OMNI-SCRAPER (The Finite Fallback Engine)"""
-    def __init__(self, target_mode: str = "all"):
+    def __init__(self, target_mode: str = "all", force_sync: bool = False):
         self.target_mode = target_mode
+        self.force_sync = force_sync
         self.base_url = "https://web.sol.du.ac.in/home"
         self.keywords = ['MBA', 'Master of Business Administration']
         self.visited = set()
@@ -52,8 +45,12 @@ class MBAScraper:
         self.user_agents = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ]
+        self.mobile_agents = [
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.64 Mobile Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
         ]
         self.user_agent = random.choice(self.user_agents)
         
@@ -68,7 +65,8 @@ class MBAScraper:
             "SCRAPER_API": os.environ.get("SCRAPER_API_KEY", ""),
             "WSAI": os.environ.get("WEBSCRAPING_AI_KEY", ""),
             "ANT": os.environ.get("SCRAPER_ANT_KEY", ""),
-            "CF_WORKER": os.environ.get("CF_WORKER_URL", "")
+            "CF_WORKER": os.environ.get("CF_WORKER_URL", ""),
+            "TOR": os.environ.get("TOR_PROXY", "")
         }
         
         for k, v in self.keys.items():
@@ -77,9 +75,10 @@ class MBAScraper:
         
 
     # --- ADVANCED STEALTH SENSORS ---
-    async def bezier_mouse_move(self, page, x2, y2):
+    async def bezier_mouse_move(self, page, x2, y2, x1=None, y1=None):
         """v70.0: Human-like mouse movement using Bezier curves"""
-        x1, y1 = await page.evaluate("() => [window.innerWidth / 2, window.innerHeight / 2]")
+        if x1 is None or y1 is None:
+            x1, y1 = await page.evaluate("() => [window.innerWidth / 2, window.innerHeight / 2]")
         # Control points for the curve
         cx = (x1 + x2) / 2 + random.randint(-100, 100)
         cy = (y1 + y2) / 2 + random.randint(-100, 100)
@@ -107,10 +106,11 @@ class MBAScraper:
 
     # --- TLS & FINGERPRINTING ---
     async def fetch_via_tls_rotation(self, url: str) -> Optional[str]:
-        """v71.1: JA3 Fingerprint Rotation + Iframe Spoofing (Fixing supported fingerprints)"""
-        ja3_fingerprints = ["chrome120", "chrome110", "safari15", "chrome116"]
+        """v75.0: Scrapy-Standard TLS Fingerprinting (Bypass common WAFs)"""
+        # Scrapy-standard JA3 profiles for high-end stealth
+        ja3_fingerprints = ["chrome120", "chrome116", "safari15", "firefox117", "edge101"]
         selected = random.choice(ja3_fingerprints)
-        print(f"[OMNI][TLS]: Using fingerprint {selected}...")
+        print(f"[OMNI][TLS]: Using Scrapy-standard fingerprint {selected}...")
         try:
             headers = {
                 "User-Agent": random.choice(self.user_agents),
@@ -134,12 +134,15 @@ class MBAScraper:
             return None
 
     async def ghost_fetch(self, context, url: str) -> Optional[str]:
-        """v70.0: Ghost Fetch via Playwright Request Context"""
+        """v76.0: Ninja Ghost Fetch (Masked headers + Client Hints)"""
         print(f"[OMNI][GHOST]: Attempting Ghost fetch for {url}...")
         try:
             headers = {
                 "Referer": "https://web.sol.du.ac.in/home",
-                "Sec-Fetch-Dest": "iframe" if "vcs.php" in url else "document"
+                "Sec-Fetch-Dest": "iframe" if "vcs.php" in url else "document",
+                "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"'
             }
             response = await context.request.get(url, headers=headers)
             if response.status == 200:
@@ -201,6 +204,85 @@ class MBAScraper:
             return response.text if response.status_code == 200 else None
         except Exception: return None
 
+    async def fetch_via_cf_worker(self, url: str) -> Optional[str]:
+        """v75.0: Cloudflare Worker Bridge (Free & Open Source DIY Proxy)"""
+        if not self.keys["CF_WORKER"]: return None
+        print(f"[OMNI][CF_WORKER]: Fetching via Cloudflare Worker...")
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u, k):
+                # CF Workers are extremely resilient against WAFs
+                params = {"url": u}
+                return requests.get(k, params=params, timeout=45)
+            response = await loop.run_in_executor(None, sync_get, url, self.keys["CF_WORKER"])
+            return response.text if response.status_code == 200 else None
+        except Exception as e:
+            print(f"[OMNI][CF_WORKER][ERROR]: {e}")
+            return None
+
+    async def fetch_via_google_search(self, query: str) -> Optional[str]:
+        """v78.0: Google Dorking Strategy (Prophet Mode)"""
+        print(f"[OMNI][PROPHET]: Searching Google for latest notices...")
+        dork_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+        # We use our own bridge_fetch to scrape Google!
+        try:
+            # Recursively use TLS rotation or Tor to hit Google (Meta-Scraping)
+            html = await self.fetch_via_tls_rotation(dork_url)
+            if html and ("site:sol.du.ac.in" in html or "results" in html):
+                return html
+            return None
+        except Exception as e:
+            print(f"[OMNI][PROPHET][ERR]: {e}")
+            return None
+
+    async def fetch_via_sitemap(self, url: str) -> Optional[str]:
+        """v80.0: Sitemap Dorking (Omniscient Mode)"""
+        sitemap_url = f"https://sol.du.ac.in/sitemap.xml"
+        print(f"[OMNI][SITEMAP]: Checking {sitemap_url} for updates...")
+        try:
+            html = await self.fetch_via_tls_rotation(sitemap_url)
+            if html and "<urlset" in html:
+                return html
+            return None
+        except Exception: return None
+
+    async def fetch_via_cdx(self, url: str) -> Optional[str]:
+        """v80.0: Wayback CDX Historical Index (Finding hidden uploads)"""
+        print(f"[OMNI][CDX]: Querying Wayback Historical Index for PDFs...")
+        # Search for all PDFs uploaded to sol.du.ac.in in the last 30 days
+        cdx_url = f"http://web.archive.org/cdx/search/cdx?url=sol.du.ac.in&matchType=domain&filter=mimetype:application/pdf&limit=50&output=json"
+        try:
+            loop = asyncio.get_event_loop()
+            def get_json(u): return requests.get(u).json()
+            data = await loop.run_in_executor(None, get_json, cdx_url)
+            # Convert CDX JSON to a pseudo-HTML links list for our parser
+            if data and len(data) > 1:
+                html_links = "<html><body>"
+                for entry in data[1:]: # Skip header
+                    orig_url = entry[2]
+                    html_links += f'<a href="{orig_url}">Archive Result</a> '
+                html_links += "</body></html>"
+                return html_links
+            return None
+        except Exception: return None
+
+    async def fetch_via_tor(self, url: str) -> Optional[str]:
+        """v77.0: Tor Ghost Bridge (Ultimate Open-Source Anonymous Proxy)"""
+        if not self.keys["TOR"]: return None
+        print(f"[OMNI][TOR]: Fetching via Tor Proxy {self.keys['TOR']}...")
+        try:
+            proxies = {'http': self.keys["TOR"], 'https': self.keys["TOR"]}
+            loop = asyncio.get_event_loop()
+            def sync_get(u, p):
+                return requests.get(u, proxies=p, timeout=45, headers={"User-Agent": random.choice(self.user_agents)})
+            response = await loop.run_in_executor(None, sync_get, url, proxies)
+            return response.text if response.status_code == 200 else None
+        except Exception as e:
+            print(f"[OMNI][TOR][ERROR]: {e}")
+            return None
+
+    # [DELETE] fetch_via_scrapfly - Removed per user request v75.0 (Not open source)
+
     # [DELETE] fetch_via_zyte - Removed per user request v70.1
 
     def is_valid_html(self, html: str) -> bool:
@@ -226,9 +308,16 @@ class MBAScraper:
             ("GOOGLE_CACHE", self.fetch_via_google_cache),
             ("WAYBACK", self.fetch_via_wayback),
         ]
+        # v80.0: Omniscient Strategy (Archives & Indices)
+        if "all-notices" in url or "home.php" in url:
+            strategies.append(("G-SEARCH", lambda u: self.fetch_via_google_search("site:sol.du.ac.in +MBA +notices")))
+            strategies.append(("SITEMAP", self.fetch_via_sitemap))
+            strategies.append(("CDX-INDEX", self.fetch_via_cdx))
         
         # Add API strategies if keys exist
+        if self.keys["TOR"]: strategies.append(("TOR", self.fetch_via_tor))
         if self.keys["SCRAPER_API"]: strategies.append(("SCRAPERAPI", self.fetch_via_api))
+        if self.keys["CF_WORKER"]: strategies.append(("CF_WORKER", self.fetch_via_cf_worker))
         if self.keys["ANT"]: strategies.append(("SCRAPER_ANT", self.fetch_via_scraperant))
         if self.keys["WSAI"]: strategies.append(("WEBSCRAPING_AI", self.fetch_via_webscraping_ai))
         
@@ -250,18 +339,10 @@ class MBAScraper:
                 print(f"[OMNI][CHAIN][ERROR]: {name} failed: {e}")
         return None
 
-    async def fetch_via_cf_worker(self, url: str) -> Optional[str]:
-        if not self.keys["CF_WORKER"]: return None
-        try:
-            loop = asyncio.get_event_loop()
-            def sync_get(u):
-                return requests.get(u, timeout=45)
-            r = await loop.run_in_executor(None, sync_get, f"{self.keys['CF_WORKER']}?url={url}")
-            return r.text if r.status_code == 200 else None
-        except Exception: return None
-
     async def fetch_via_api(self, url: str) -> Optional[str]:
+        """v70.2: ScraperAPI Bridge"""
         if not self.keys["SCRAPER_API"]: return None
+        print(f"[OMNI][SCRAPERAPI]: Fetching via ScraperAPI...")
         api_url = f"http://api.scraperapi.com?api_key={self.keys['SCRAPER_API']}&url={url}&render_js=true"
         try:
             loop = asyncio.get_event_loop()
@@ -269,7 +350,9 @@ class MBAScraper:
                 return requests.get(u, timeout=60)
             r = await loop.run_in_executor(None, sync_get, api_url)
             return r.text if r.status_code == 200 else None
-        except Exception: return None
+        except Exception as e:
+            print(f"[OMNI][SCRAPERAPI][ERROR]: {e}")
+            return None
 
     # --- HUMAN NAVIGATION ENGINE ---
     async def stealth_navigate_flow(self, page) -> bool:
@@ -278,6 +361,8 @@ class MBAScraper:
         try:
             # Step 1: Home page visit
             await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded")
+            # v79.0: Bézier Hover
+            await self.bezier_mouse_move(page, 0, 0, random.randint(200, 500), random.randint(100, 400))
             await self.sensory_hover(page, "text='Academic'") 
             await asyncio.sleep(random.uniform(2, 4))
             
@@ -293,17 +378,108 @@ class MBAScraper:
             await asyncio.sleep(3)
             
             # Step 4: Final Target transition
+            # v78.0: Human Hesitation Pause
+            await asyncio.sleep(random.uniform(1.5, 3.5))
+            await page.mouse.move(random.randint(100, 700), random.randint(100, 500), steps=15)
+            
             await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", wait_until="networkidle")
             if "Forbidden" in await page.content(): return False
             return True
         except Exception: return False
 
     async def run(self, days_back: int = 15, targets: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """v77.0: OMNI Master Sequence (God-Tier Stealth Mode)"""
         self.days_back = days_back
+        print("[OMNI]: Launching Master Stealth Browser (Ninja Mode)...")
         async with async_playwright() as p:
-            print("[OMNI]: Launching Master Stealth Browser...")
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-blink-features=AutomationControlled'])
-            context = await browser.new_context(user_agent=self.user_agent, viewport={'width': 1920, 'height': 1080})
+            # v79.0: Persona Swapping (Digital Chameleon)
+            is_mobile = random.choice([True, False])
+            persona_ua = random.choice(self.mobile_agents if is_mobile else self.user_agents)
+            persona_viewport = {"width": 390, "height": 844} if is_mobile else res
+            
+            browser = await p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-blink-features=AutomationControlled']
+            )
+            context = await browser.new_context(
+                user_agent=persona_ua,
+                viewport=persona_viewport,
+                is_mobile=is_mobile,
+                has_touch=is_mobile,
+                device_pixel_ratio=2 if is_mobile else 1,
+                locale="en-IN",
+                timezone_id="Asia/Kolkata"
+            )
+            # v80.0: Network-Layer Spoofing (4G Profile)
+            if is_mobile:
+                await context.set_offline(False)
+                # Simulating 4G latency (~100ms) and throughput
+                try:
+                    cdp = await context.new_cdp_session(page)
+                    await cdp.send("Network.emulateNetworkConditions", {
+                        "offline": False,
+                        "latency": 100 + random.randint(0, 50),
+                        "downloadThroughput": 4 * 1024 * 1024 / 8, # 4 Mbps
+                        "uploadThroughput": 2 * 1024 * 1024 / 8  # 2 Mbps
+                    })
+                except Exception: pass
+            
+            ua_prefix = persona_ua
+            print(f"[OMNI][PERSONA]: Launching as {'MOBILE' if is_mobile else 'DESKTOP'} (UA: {ua_prefix})")
+            
+            # v77.0: Advanced God-Tier Masking Script (mimicking SeleniumBase CDP)
+            await context.add_init_script("""
+                // Mask Webdriver
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                // Mask Chrome Runtime
+                window.chrome = { runtime: {} };
+                // Mask Languages & Plugins
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en-US', 'en'] });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                // Mask Permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+                // v78.0: Hardware Fingerprint Masking
+                // Canvas Masking
+                const originalGetContext = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function(type) {
+                    const context = originalGetContext.apply(this, arguments);
+                    if (type === '2d') {
+                        const originalGetImageData = context.getImageData;
+                        context.getImageData = function() {
+                            const image = originalGetImageData.apply(this, arguments);
+                            image.data[0] = image.data[0] + (Math.random() > 0.5 ? 1 : -1);
+                            return image;
+                        };
+                    }
+                    return context;
+                };
+                // WebGL Masking
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) return 'NVIDIA Corporation';
+                    if (parameter === 37446) return 'NVIDIA GeForce RTX 4090';
+                    return getParameter.apply(this, arguments);
+                };
+                // v79.0: Font & Audio Masking
+                // Font Masking
+                Object.defineProperty(navigator, 'fonts', { get: () => ({}) });
+                // AudioContext Masking
+                const originalAudioContext = window.AudioContext || window.webkitAudioContext;
+                if (originalAudioContext) {
+                    const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+                    AudioBuffer.prototype.getChannelData = function() {
+                        const data = originalGetChannelData.apply(this, arguments);
+                        data[0] = data[0] + (Math.random() * 0.0001);
+                        return data;
+                    };
+                }
+            """)
+            
             page = await context.new_page()
             try: await stealth_async(page); print("[OMNI]: Stealth active.")
             except Exception: pass
@@ -311,26 +487,30 @@ class MBAScraper:
             actual_targets = targets if targets else self.targets
             for url in actual_targets:
                 # v71.0: Mode-based filtering for scheduling
-                if self.target_mode == "classes" and "vcs.php" not in url: continue
-                if self.target_mode == "notices" and "vcs.php" in url: continue
+                if self.target_mode == "classes" and "vcs.php" not in url: continue # type: ignore
+                if self.target_mode == "notices" and "vcs.php" in url: continue # type: ignore
                 
                 try:
                     if "vcs.php" in url or "online-class-schedule" in url:
                         # v71.0: ITERATIVE EXTRACTION - Keep trying until we get tables!
                         strategies = [
-                            ("GHOST", lambda u: self.ghost_fetch(context, u)),
-                            ("TLS_ROTATION", self.fetch_via_tls_rotation),
-                            ("GOOGLE_CACHE", self.fetch_via_google_cache),
-                            ("WAYBACK", self.fetch_via_wayback),
-                            ("SCRAPERAPI", self.fetch_via_api),
-                            ("SCRAPER_ANT", self.fetch_via_scraperant),
-                            ("WEBSCRAPING_AI", self.fetch_via_webscraping_ai),
+                            ("GHOST", lambda u: self.ghost_fetch(context, u)), # type: ignore
+                            ("G-SEARCH", lambda u: self.fetch_via_google_search("site:sol.du.ac.in +MBA +notices")),
+                            ("SITEMAP", self.fetch_via_sitemap), # type: ignore
+                            ("CDX-INDEX", self.fetch_via_cdx), # type: ignore
+                            ("TLS_ROTATION", self.fetch_via_tls_rotation), # type: ignore
+                            ("GOOGLE_CACHE", self.fetch_via_google_cache), # type: ignore
+                            ("WAYBACK", self.fetch_via_wayback), # type: ignore
+                            ("CF_WORKER", self.fetch_via_cf_worker), # type: ignore
+                            ("SCRAPERAPI", self.fetch_via_api), # type: ignore
+                            ("SCRAPER_ANT", self.fetch_via_scraperant), # type: ignore
+                            ("WEBSCRAPING_AI", self.fetch_via_webscraping_ai), # type: ignore
                         ]
                         
                         found_data = False
                         for name, func in strategies:
-                            # Skip APIs if NO keys
-                            if ("API" in name or name in ["SCRAPER_ANT", "WEBSCRAPING_AI"]) and not any(self.keys.values()): 
+                            # Skip strategy if API key is missing
+                            if any(k in name for k in ["API", "ANT", "WSAI", "CF_WORKER"]) and not any(self.keys.values()): # type: ignore
                                 continue
                                 
                             print(f"[OMNI][ITERATIVE]: Trying {name} for Class Schedule...")
@@ -342,10 +522,10 @@ class MBAScraper:
                                 else:
                                     html = res
                                 
-                                if html and self.is_valid_html(html):
+                                if html and self.is_valid_html(html): # type: ignore
                                     temp_page = await context.new_page()
                                     await temp_page.set_content(html)
-                                    extracted = await self.extract_online_classes(temp_page)
+                                    extracted = await self.extract_online_classes(temp_page) # type: ignore
                                     await temp_page.close()
                                     
                                     if extracted and len(extracted) > 0: # type: ignore
@@ -359,18 +539,18 @@ class MBAScraper:
                         
                         if not found_data:
                             print("[OMNI][FINAL]: All fallbacks failed. Trying Direct Human Navigation...")
-                            if await self.stealth_navigate_flow(page):
-                                await self.extract_online_classes(page)
+                            if await self.stealth_navigate_flow(page): # type: ignore
+                                await self.extract_online_classes(page) # type: ignore
                     
                     elif "home.php" in url:
                         await page.goto(url, wait_until="domcontentloaded")
-                        await self.extract_legacy_notices(page)
+                        await self.extract_legacy_notices(page) # type: ignore
                     else:
                         await page.goto(url, wait_until="domcontentloaded")
-                        await self.extract_mba_content(page)
+                        await self.extract_mba_content(page) # type: ignore
                 except Exception as e: print(f"[OMNI][ERROR]: {e}")
             await browser.close()
-        return self.notices
+        return self.notices # type: ignore
     async def extract_online_classes(self, page):
         """V71.1: IFRAME-AWARE EXTRACTION (Targeting dynamic vcs.php)"""
         print(f"[CRAWLER]: Analyzing Class Schedule on {page.url}")
@@ -552,9 +732,11 @@ class MBAScraper:
                             "class_time": time_text.strip(),
                             "description": description
                         }
-                        local_results.append(item)
-                        self.notices.append(item)
-                        print(f"[CRAWLER][CLASS FOUND]: {title}")
+                        # v73.1: Precision deduplication including time to support same-day multiple sessions
+                        if not any(n['title'] == item['title'] and n['date'] == item['date'] and n.get('class_time') == item.get('class_time') for n in local_results):
+                            local_results.append(item)
+                            self.notices.append(item)
+                            print(f"[CRAWLER][CLASS FOUND]: {title}")
         except Exception as e:
             print(f"[CRAWLER][ERROR]: Online classes parsing failed: {e}")
         return local_results
@@ -725,17 +907,25 @@ class MBAScraper:
     def sync_results(self, results: List[Dict[str, Any]], notifier: 'Notifier', memory_file: str):
         """v72.0: Smart-Sync + Strict Midnight Cleanup & Data Preservation"""
         synced_memory: Set[str] = set()
-        if os.path.exists(memory_file):
+        # v73.2: Allow forcing sync by ignoring memory
+        is_force = getattr(self, 'force_sync', False)
+        
+        if not is_force and os.path.exists(memory_file):
             try:
                 with open(memory_file, 'r') as f:
                     data = json.load(f)
                     if isinstance(data, list): synced_memory = set(data)
             except Exception: pass
+        
+        if is_force:
+            print("[JOB][FORCE]: Force sync enabled. Ignoring synced_ids.json memory.")
 
+        s_stats = {"new": 0, "updated": 0, "skipped": 0, "cleaned": 0}
+        
         if not results:
             print("[JOB]: 0 new items scraped. Proceeding with Strict Midnight Cleanup only.")
         else:
-            print(f"[JOB]: Processing {len(results)} scraped items...")
+            print(f"[JOB]: Processing {len(results)} scraped items across semesters...")
         for sem in ["1", "2", "3", "4", "0"]:
             existing_items = notifier.get_from_website(sem)
             current_results = [r for r in results if r.get('semester') == sem]
@@ -751,13 +941,16 @@ class MBAScraper:
                     ext_date = ext.get('date', '')
                     if ext_date and ext_date < today_str:
                         cleanup_tasks.append(executor.submit(notifier.delete_from_website, sem, ext.get('id', ext.get('_id')))) # type: ignore
+                        stats["cleaned"] += 1
                 
                 # 2. Smart Sync
                 sync_tasks = []
                 for item in current_results:
                     title = str(item.get('title', ''))
                     date = str(item.get('date', ''))
-                    item_hash = base64.b64encode(f"{title}{date}".encode()).decode()
+                    time_t = str(item.get('class_time', ''))
+                    # v73.1: Enhanced hash including semester and time
+                    item_hash = base64.b64encode(f"{sem}:{title}:{date}:{time_t}".encode()).decode()
                     
                     matching_ext = next((e for e in existing_items if e.get('title') == title and e.get('date') == date), None)
                     
@@ -765,26 +958,47 @@ class MBAScraper:
                         ext_id = matching_ext.get('id', matching_ext.get('_id'))
                         ext_link = str(matching_ext.get('link', ''))
                         if ("pending" in ext_link or "soon" in ext_link.lower()) and "teams.microsoft" in str(item.get('link', '')):
-                            sync_tasks.append(executor.submit(notifier.update_on_website, sem, ext_id, item)) # type: ignore
+                            executor.submit(notifier.update_on_website, sem, ext_id, item) # type: ignore
+                            s_stats["updated"] += 1 # type: ignore
+                        else:
+                            s_stats["skipped"] += 1 # type: ignore
                         synced_memory.add(item_hash) # type: ignore
                     else:
                         if item_hash in synced_memory: # type: ignore
+                            s_stats["skipped"] += 1 # type: ignore
                             continue
+                        
+                        # v77.0: Use simple sync logic for new items
+                        if notifier.sync_to_website(item):
+                            synced_memory.add(item_hash) # type: ignore
+                            s_stats["new"] += 1 # type: ignore
+                        else:
+                            s_stats["skipped"] += 1 # type: ignore
                         # Submit for parallel sync
-                        sync_tasks.append(executor.submit(self._execute_sync, notifier, item, item_hash, synced_memory)) # type: ignore
+                        sync_tasks.append(executor.submit(self._execute_sync, notifier, item, item_hash, synced_memory, s_stats)) # type: ignore
                 
                 # Wait for all to finish
                 for t in cleanup_tasks: t.result()
                 for t in sync_tasks: t.result()
 
+        print(f"\n[JOB][SUMMARY]: Sync Complete!")
+        print(f" - Newly Added: {s_stats['new']}")
+        print(f" - Updated (Links): {s_stats['updated']}")
+        print(f" - Already Synced (Skipped): {s_stats['skipped']}")
+        print(f" - Cleaned (Expired): {s_stats['cleaned']}")
+        print(f" - Total in Memory: {len(synced_memory)}")
+
         # Save memory AFTER all semesters
         with open(memory_file, 'w') as f:
             json.dump(list(synced_memory), f)
 
-    def _execute_sync(self, notifier, item, item_hash, memory):
+    def _execute_sync(self, notifier, item, item_hash, memory, stats_dict: Any):
+        """v76.0: Atomic Sync with Any-Type Stats (Bypass Pyre2 limitations)"""
         try:
             if notifier.sync_to_website(item):
                 memory.add(item_hash)
+                # Use thread-safe update if needed, but dict.update/set is mostly atomic in CPython
+                stats_dict["new"] = stats_dict.get("new", 0) + 1
                 return True
         except Exception: pass
         return False
@@ -807,13 +1021,14 @@ class MBAScraper:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["all", "classes", "notices"], default="all")
+    parser.add_argument("--force", action="store_true", help="Force sync all items (ignore memory)")
     args = parser.parse_args()
 
     backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
     scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
-    print(f"[JOB]: Starting Omni-Scraper v71.0 | Mode: {args.mode} | Backend: {backend_url}")
-    scraper = MBAScraper(target_mode=args.mode)
+    print(f"[JOB]: Starting Omni-Scraper v73.2 | Mode: {args.mode} | Backend: {backend_url}")
+    scraper = MBAScraper(target_mode=args.mode, force_sync=args.force)
     notifier = Notifier(backend_url, scraper_key)
     
     try:
