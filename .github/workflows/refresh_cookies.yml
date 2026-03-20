@@ -39,30 +39,47 @@ jobs:
                   )
                   page = await context.new_page()
                   
-                  print("Visiting SOL DU to refresh session...")
+                  print("Step 1: Visiting Main Portal...")
                   try:
-                      # Visit the parent page to acquire AWSALB + PHPSESSID
+                      await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
+                      await asyncio.sleep(5)
+                      
+                      print("Step 2: Visiting Subdomain Home...")
+                      await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
+                      await asyncio.sleep(5)
+                      
+                      print("Step 3: Visiting Schedule Page...")
                       await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
-                                      wait_until="networkidle", timeout=90000)
+                                      wait_until="networkidle", timeout=60000)
+                      await asyncio.sleep(5)
                       
                       cookies = await context.cookies()
-                      # Filter for relevant cookies
+                      print(f"Total cookies found: {len(cookies)}")
+                      for c in cookies:
+                          print(f" - Found cookie: {c['name']}")
+                          
                       important = {c['name']: c['value'] for c in cookies 
                                    if c['name'] in ['PHPSESSID', 'AWSALB', 'AWSALBCORS']}
                       
                       cookie_str = "; ".join(f"{k}={v}" for k,v in important.items())
                       
-                      if 'PHPSESSID' in cookie_str:
+                      if 'PHPSESSID' in cookie_str or 'AWSALB' in cookie_str:
                           print(f"SUCCESS: Found session cookies.")
-                          # Use environment file to share with next step
                           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                               f.write(f"cookies={cookie_str}\n")
                       else:
-                          print("FAILED: Session cookies not found.")
-                          return False
+                          # If no session cookies, then try a more broad catch
+                          print("WARNING: Specific session cookies not found. Using all available cookies.")
+                          all_cookies = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+                          if all_cookies:
+                              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                                  f.write(f"cookies={all_cookies}\n")
+                          else:
+                              print("FAILED: No cookies found at all.")
+                              exit(1)
                   except Exception as e:
                       print(f"ERROR: {e}")
-                      return False
+                      exit(1)
                   
                   await browser.close()
           
