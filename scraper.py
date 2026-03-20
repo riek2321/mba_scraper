@@ -189,6 +189,7 @@ class MBAScraper:
             "WSAI": os.environ.get("WEBSCRAPING_AI_KEY", ""),
             "ANT": os.environ.get("SCRAPER_ANT_KEY", ""),
         }
+        self.current_year: int = datetime.datetime.now().year
 
     def _iframe_headers(self) -> dict:
         return {
@@ -259,6 +260,7 @@ class MBAScraper:
             parsed = self._parse_html(html)
             for item in parsed:
                 if not any(n['link'] == item['link'] for n in self.notices):
+                    print(f"  [✔ FOUND]: {item['title']}")
                     self.notices.append(item)
 
     # ═══════════════════════════════════════════
@@ -267,10 +269,13 @@ class MBAScraper:
     async def run_class_chain(self) -> List[Dict[str, Any]]:
         print("[OMNI]: Running Class Schedule Chain...")
         for method in [self.fetch_cffi, self.fetch_wayback]:
+            print(f"[OMNI]: Trying method: {method.__name__}")
             html: Optional[str] = await method(self.class_schedule_url)
             if html and self._is_valid(html):
                 res: List[Dict[str, Any]] = self._parse_html(html)
-                if res: return res
+                if res:
+                    print(f"[SUCCESS]: Class schedule found using {method.__name__}")
+                    return res
         
         # Playwright Human Fallback
         try:
@@ -283,7 +288,9 @@ class MBAScraper:
                 self.current_url = self.class_schedule_url
                 res_frames: List[Dict[str, Any]] = await self._extract_frames(page)
                 await browser.close()
-                if res_frames: return res_frames
+                if res_frames:
+                    print(f"[SUCCESS]: Class schedule found using Playwright-HumanBot")
+                    return res_frames
         except Exception: pass
 
         # PAID APIs (ULTIMATE LAST RESORT)
@@ -372,7 +379,25 @@ class MBAScraper:
                         "description": f"MBA update found on {self.current_url}"
                     })
 
-        return results
+        # --- YEAR FILTER ---
+        # Only keep items from the current year (2026)
+        filtered_results = []
+        for item in results:
+            item_date = item.get('date', '')
+            try:
+                # If date is in YYYY-MM-DD format
+                item_year = int(item_date.split('-')[0])
+            except (ValueError, IndexError):
+                item_year = self.current_year # Default to current year if parsing fails
+            
+            if item_year == self.current_year:
+                filtered_results.append(item)
+            else:
+                # Optionally log filtered out items
+                # print(f"  [FILTERED]: Skipping old item from {item_year}: {item['title']}")
+                pass
+        
+        return filtered_results
 
     async def _extract_frames(self, page: Page) -> List[Dict[str, Any]]:
         all_raw = []
@@ -435,7 +460,8 @@ class MBAScraper:
         if mode == "all":
             print("[OMNI]: Running COMPREHENSIVE scan (Website + Notices + Classes)")
             self.notices.extend(await self.run_class_chain()) # type: ignore
-            await self.discover_and_crawl(max_pages=100)
+            await self.discover_and_crawl(max_pages=500) # Increased to 500 for deep site-wide check
+            print(f"[SUMMARY]: Total MBA items captured: {len(self.notices)}")
             return self.notices
 
         # Standard Website & Notices (10 min)
@@ -449,9 +475,11 @@ class MBAScraper:
                     parsed = self._parse_html(html)
                     for item in parsed:
                         if not any(n['link'] == item['link'] for n in self.notices):
+                            print(f"  [✔ FOUND]: {item['title']}")
                             self.notices.append(item)
             # Also run a discovery crawl
-            await self.discover_and_crawl(max_pages=50)
+            await self.discover_and_crawl(max_pages=75) # Increased logic
+            print(f"[SUMMARY]: Total MBA items found in pulse: {len(self.notices)}")
             return self.notices
 
         # Class Schedule Only (60 min)
@@ -481,6 +509,43 @@ class MBAScraper:
         print(f"[SYNC]: New={stats['new']} Skipped={stats['skipped']}")
         with open(memory_file, "w") as f:
             json.dump(list(synced), f)
+
+    def cleanup_old_data(self, notifier):
+        print("[CLEANUP]: Running auto-cleanup for old records...")
+        now = datetime.datetime.now()
+        thirty_days_ago = now - datetime.timedelta(days=30)
+        
+        # Check all semesters (0: General, 1-4: Classes)
+        for sem in ["0", "1", "2", "3", "4"]:
+            items = notifier.get_from_website(sem)
+            if not items: continue
+            
+            deleted_ids: List[str] = []
+            for item in items:
+                item_id = item.get('_id') or item.get('id')
+                if not item_id: continue
+                
+                # Parse date from item
+                date_str = item.get('date', '')
+                try:
+                    item_date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+                    
+                    to_delete = False
+                    # Rule 1: General notices older than 30 days
+                    if sem == "0" and item_date < thirty_days_ago:
+                        to_delete = True
+                    # Rule 2: Class schedules in the past
+                    elif sem != "0" and item_date.date() < now.date():
+                        to_delete = True
+                    
+                    if to_delete:
+                        if notifier.delete_from_website(sem, item_id):
+                            deleted_ids.append(str(item_id))
+                except Exception:
+                    continue # Skip items with unparseable dates
+            
+            if len(deleted_ids) > 0:
+                print(f"  [CLEANUP]: Deleted {len(deleted_ids)} old items from Semester {sem}")
 
 if __name__ == "__main__":
     asyncio.run(MBAScraper().run())

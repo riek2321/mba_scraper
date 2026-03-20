@@ -58,6 +58,10 @@ async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: st
         # Sync logic
         if hasattr(scraper, 'sync_results'):
             scraper.sync_results(results, notifier, "synced_ids.json")
+        
+        # Auto-Cleanup (Only during comprehensive scan)
+        if mode == "all" and hasattr(scraper, 'cleanup_old_data'):
+            scraper.cleanup_old_data(notifier)
         else:
             for sem in ["1", "2", "3", "4", "0"]: # type: ignore
                 sem_results = [r for r in results if str(r.get('semester')) == sem]
