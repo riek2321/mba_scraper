@@ -24,6 +24,6 @@ scrapling>=0.2.9
 botasaurus>=3.2.0
 selenium-wire>=5.1.0
 
-# ── Proxy/Network ──
-free-proxy
-proxy-broker
+# ── Proxy/Network (Optional, handled via try-except in scraper) ──
+# Removed unstable proxybroker/free-proxy for build stability.
+# Paid APIs and other stealth methods will handle networking.
