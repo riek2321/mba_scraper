@@ -29,6 +29,7 @@ jobs:
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
         run: |
           if [ -f scraper.py ]; then
             python scraper.py

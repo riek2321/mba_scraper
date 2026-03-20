@@ -43,8 +43,9 @@ class MBAScraper:
         self.notices = []
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
-        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "03773f4b-6865-442d-8863-6a31270230cd")
-        print(f"[JOB]: Scraping API Key configured: {'YES' if self.scraper_api_key else 'NO'}")
+        # v52.0: Restored ScraperAPI as primary (WebScraping.ai as backup if key has dashes)
+        self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
+        print(f"[JOB]: Scraping API Key configured: {'YES' if self.scraper_api_key else 'NO (Will fail to fetch if WAF active)'}")
         print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
             "https://sol.du.ac.in/home.php",
@@ -64,13 +65,16 @@ class MBAScraper:
             is_ws_ai = "-" in self.scraper_api_key
             
             if is_ws_ai:
-                # WebScraping.ai endpoint
+                # WebScraping.ai format (UUID with dashes)
                 api_url = f"https://api.webscraping.ai/html?url={url}&api_key={self.scraper_api_key}&proxy=residential&render=true"
             else:
-                # ScraperAPI format
+                # ScraperAPI format (default)
                 api_url = f"http://api.scraperapi.com?api_key={self.scraper_api_key}&url={url}"
-                if "vcs.php" not in url:
+                # Always render JS for vcs.php via ScraperAPI if possible, but keep it efficient
+                if "vcs.php" in url:
                     api_url += "&render_js=true"
+                else:
+                    api_url += "&render_js=true" # Default to render for better success rate
                 
             loop = asyncio.get_event_loop()
             def sync_get(u):
