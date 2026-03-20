@@ -596,13 +596,16 @@ if __name__ == "__main__":
             if idx + 1 < len(sys.argv): mode = sys.argv[idx+1]
         
         scraper = MBAScraper(target_mode=mode)
-        results = await scraper.run()
+        results = await scraper.run(mode=mode)
         
-        # standalone sync if running direct
-        if mode == "all":
+        # standalone sync if running direct (sync for all modes that produce items)
+        if results:
             notifier = Notifier(BACKEND_URL, SCRAPER_KEY)
             scraper.sync_results(results, notifier, "synced_ids.json")
-            scraper.cleanup_old_data(notifier)
-            print("[OMNI]: Direct scan and sync completed.")
+            if mode == "all":
+                scraper.cleanup_old_data(notifier)
+            print(f"[OMNI]: Direct scan ({mode}) and sync completed.")
+        else:
+            print(f"[OMNI]: No items to sync for mode '{mode}'.")
 
     asyncio.run(standalone_run())
