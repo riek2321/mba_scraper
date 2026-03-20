@@ -12,6 +12,12 @@ import time
 from typing import List, Dict, Any, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    from dotenv import load_dotenv # type: ignore
+    load_dotenv()
+except ImportError:
+    pass
+
 # ─────────────────────────────────────────────
 # IMPORTS — Graceful fallback if not installed
 # ─────────────────────────────────────────────
@@ -185,9 +191,9 @@ class MBAScraper:
         self.user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Gecko) Chrome/124.0.0.0 Safari/537.36"
         self.current_url: str = ""
         self.keys: Dict[str, str] = {
-            "SCRAPER_API": os.environ.get("SCRAPER_API_KEY", ""),
-            "WSAI": os.environ.get("WEBSCRAPING_AI_KEY", ""),
-            "ANT": os.environ.get("SCRAPER_ANT_KEY", ""),
+            "SCRAPER_API": os.environ.get("SCRAPER_API_KEY") or os.environ.get("SCRAPERAPI_KEY", ""),
+            "WSAI": os.environ.get("WEBSCRAPING_AI_KEY") or os.environ.get("WEBSCRAPING_API_KEY", ""),
+            "ANT": os.environ.get("SCRAPER_ANT_KEY") or os.environ.get("SCRAPERANT_KEY", ""),
         }
         self.current_year: int = datetime.datetime.now().year
 
@@ -296,10 +302,17 @@ class MBAScraper:
         # PAID APIs (ULTIMATE LAST RESORT)
         print("[OMNI]: Free methods failed. Using paid fallbacks...")
         for provider in ["SCRAPER_API", "ANT", "WSAI"]:
+            if not self.keys.get(provider):
+                print(f"[OMNI]: Skipping {provider} fallback (API Key not found in Environment)")
+                continue
+            print(f"[OMNI]: Trying paid fallback: {provider}")
             html = await self.fetch_paid(self.class_schedule_url, provider)
             if html and self._is_valid(html):
                 res_paid: List[Dict[str, Any]] = self._parse_html(html)
-                if res_paid: return res_paid
+                if res_paid:
+                    print(f"[SUCCESS]: Class schedule found using {provider}")
+                    return res_paid
+        print("[OMNI]: Checked schedule chain. No new MBA classes found.")
         return []
 
     # ═══════════════════════════════════════════
@@ -343,29 +356,41 @@ class MBAScraper:
 
         for table in soup.find_all("table"):
             rows = table.find_all("tr")
-            date_str: Optional[str] = None
-            for r in rows:
-                if "date:" in r.get_text().lower():
-                    m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', r.get_text())
-                    if m:
-                        date_str = m.group(1)
-                        break
-            if not date_str: continue
+            current_table_date: Optional[str] = None
             for row in rows:
+                txt = row.get_text().lower()
+                # Check for date header in this row
+                if "date:" in txt:
+                    m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', txt)
+                    if m:
+                        current_table_date = m.group(1)
+                        continue # Header row, move to next
+                
+                if not current_table_date:
+                    continue
+                
                 cells = row.find_all(["td", "th"])
                 if len(cells) < 4: continue
                 course = cells[0].get_text(strip=True)
-                if not any(kw.lower() in course.lower() for kw in self.keywords): continue
-                sem, subj = cells[1].get_text(strip=True), cells[2].get_text(strip=True)
-                time_txt = next((c.get_text(strip=True) for c in cells if re.search(r'\d{1,2}:\d{2}', c.get_text())), "")
-                href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
-                semester = self.extract_semester_logic(sem or course)
-                link = href if href else "#pending"
-                results.append({
-                    "title": f"[{date_str}] MBA Sem {semester}: {subj} ({time_txt})",
-                    "link": link, "semester": semester, "date": self.parse_date(str(date_str)), # type: ignore
-                    "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
-                })
+                
+                # Check MBA filter
+                if any(kw.lower() in course.lower() for kw in self.keywords):
+                    sem, subj = cells[1].get_text(strip=True), cells[2].get_text(strip=True)
+                    time_txt = next((c.get_text(strip=True) for c in cells if re.search(r'\d{1,2}:\d{2}', c.get_text())), "")
+                    href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
+                    semester = self.extract_semester_logic(sem or course)
+                    link = href if href else "#pending"
+                    
+                    results.append({
+                        "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
+                        "link": link, "semester": semester, "date": self.parse_date(str(current_table_date)),
+                        "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
+                    })
+        
+        # Log if we found classes
+        class_count = len([r for r in results if ": MBA Sem" in r['title']])
+        if class_count > 0:
+            print(f"  [✔ FOUND]: Extracted {class_count} MBA classes from schedule.")
         
         # General MBA filter for all other links
         for a in soup.find_all('a', href=True):
@@ -417,18 +442,21 @@ class MBAScraper:
     def _parse_raw_tables(self, tables: List[Any]) -> List[Dict[str, Any]]:
         results = []
         for rows in tables:
-            d_str = None
-            for r in rows:
-                combined_text = " ".join(c.get("text", "") for c in r)
+            current_table_date = None
+            for cells_raw in rows:
+                cells = list(cells_raw) # type: ignore
+                combined_text = " ".join(str(c.get("text", "")) for c in cells)
+                
+                # Check for date header
                 if "date:" in combined_text.lower():
                     m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', combined_text)
                     if m:
-                        d_str = m.group(1)
-                        break
-            if not d_str: continue
-            for cells_raw in rows:
-                cells = list(cells_raw) # type: ignore
-                if len(cells) < 4: continue
+                        current_table_date = m.group(1)
+                        continue
+                
+                if not current_table_date or len(cells) < 4:
+                    continue
+                    
                 course = str(cells[0].get("text", "")) # type: ignore
                 if not any(kw.lower() in course.lower() for kw in self.keywords): continue
                 sem, subj = str(cells[1].get("text", "")), str(cells[2].get("text", "")) # type: ignore
@@ -436,8 +464,8 @@ class MBAScraper:
                 href = next((str(c["href"]) for c in list(reversed(cells)) if c.get("href") and "teams.microsoft" in str(c["href"])), "#pending") # type: ignore
                 semester = self.extract_semester_logic(sem or course)
                 results.append({
-                    "title": f"[{d_str}] MBA Sem {semester}: {subj} ({time_txt})",
-                    "link": href, "semester": semester, "date": self.parse_date(str(d_str)), # type: ignore
+                    "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
+                    "link": href, "semester": semester, "date": self.parse_date(str(current_table_date)),
                     "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
                 })
         return results
@@ -503,9 +531,14 @@ class MBAScraper:
             h = base64.b64encode(f"{item['semester']}:{item['title']}:{item['date']}:{item['class_time']}".encode()).decode()
             if h in synced and not getattr(self, "force_sync", False): # type: ignore
                 stats["skipped"] = int(stats["skipped"]) + 1; continue
+            
+            print(f"[SYNC]: Sending '{item['title']}' to Backend (Sem {item['semester']})...")
             if notifier.sync_to_website(item):
                 synced.add(h); stats["new"] = int(stats["new"]) + 1 # type: ignore
-            else: stats["skipped"] = int(stats["skipped"]) + 1 # type: ignore
+                print(f"  [✔ SYNC SUCCESS]")
+            else: 
+                stats["skipped"] = int(stats["skipped"]) + 1 # type: ignore
+                print(f"  [✖ SYNC FAILED]")
         print(f"[SYNC]: New={stats['new']} Skipped={stats['skipped']}")
         with open(memory_file, "w") as f:
             json.dump(list(synced), f)

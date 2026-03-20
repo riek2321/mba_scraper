@@ -4,6 +4,7 @@ requests==2.31.0
 python-dateutil
 playwright-stealth
 beautifulsoup4>=4.12.0
+python-dotenv
 # asyncio is a standard library, no need to list it here
 
 # ── TLS/HTTP Fingerprinting ──

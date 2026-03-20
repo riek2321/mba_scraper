@@ -52,6 +52,8 @@ class Notifier:
         }
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("POST", url, json=payload, headers=headers)
+        status = resp.status_code if resp else "FAILED"
+        print(f"  [API]: POST {url} | Result: {status}")
         # Success if 201 (Created) or 409 (Conflict = Already exists)
         return resp is not None and resp.status_code in [201, 409]
 
