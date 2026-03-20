@@ -9,6 +9,7 @@ import base64
 import sys
 import argparse
 from typing import List, Dict, Any, Optional, Set
+from concurrent.futures import ThreadPoolExecutor
 
 # Attempted imports for IDE support
 try:
@@ -734,34 +735,51 @@ class MBAScraper:
             now_ist = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=5, minutes=30)
             today_str = now_ist.strftime("%Y-%m-%d")
             
-            # 1. Cleanup old
-            for ext in existing_items:
-                ext_date = ext.get('date', '')
-                if ext_date and ext_date < today_str:
-                    notifier.delete_from_website(sem, ext.get('id', ext.get('_id')))
-
-            # 2. Smart Sync
-            for item in current_results:
-                title = str(item.get('title', ''))
-                date = str(item.get('date', ''))
-                item_hash = base64.b64encode(f"{title}{date}".encode()).decode()
+            # Use ThreadPoolExecutor for high-speed parallel sync
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                # 1. Cleanup old
+                cleanup_tasks = []
+                for ext in existing_items:
+                    ext_date = ext.get('date', '')
+                    if ext_date and ext_date < today_str:
+                        cleanup_tasks.append(executor.submit(notifier.delete_from_website, sem, ext.get('id', ext.get('_id')))) # type: ignore
                 
-                matching_ext = next((e for e in existing_items if e.get('title') == title and e.get('date') == date), None)
-                
-                if matching_ext:
-                    ext_id = matching_ext.get('id', matching_ext.get('_id'))
-                    ext_link = str(matching_ext.get('link', ''))
-                    if ("pending" in ext_link or "soon" in ext_link.lower()) and "teams.microsoft" in str(item.get('link', '')):
-                        notifier.update_on_website(sem, ext_id, item)
-                    synced_memory.add(item_hash) # type: ignore
-                else:
-                    if item_hash in synced_memory: # type: ignore
-                        continue
-                    if notifier.sync_to_website(item):
+                # 2. Smart Sync
+                sync_tasks = []
+                for item in current_results:
+                    title = str(item.get('title', ''))
+                    date = str(item.get('date', ''))
+                    item_hash = base64.b64encode(f"{title}{date}".encode()).decode()
+                    
+                    matching_ext = next((e for e in existing_items if e.get('title') == title and e.get('date') == date), None)
+                    
+                    if matching_ext:
+                        ext_id = matching_ext.get('id', matching_ext.get('_id'))
+                        ext_link = str(matching_ext.get('link', ''))
+                        if ("pending" in ext_link or "soon" in ext_link.lower()) and "teams.microsoft" in str(item.get('link', '')):
+                            sync_tasks.append(executor.submit(notifier.update_on_website, sem, ext_id, item)) # type: ignore
                         synced_memory.add(item_hash) # type: ignore
+                    else:
+                        if item_hash in synced_memory: # type: ignore
+                            continue
+                        # Submit for parallel sync
+                        sync_tasks.append(executor.submit(self._execute_sync, notifier, item, item_hash, synced_memory)) # type: ignore
+                
+                # Wait for all to finish
+                for t in cleanup_tasks: t.result()
+                for t in sync_tasks: t.result()
 
+        # Save memory AFTER all semesters
         with open(memory_file, 'w') as f:
             json.dump(list(synced_memory), f)
+
+    def _execute_sync(self, notifier, item, item_hash, memory):
+        try:
+            if notifier.sync_to_website(item):
+                memory.add(item_hash)
+                return True
+        except Exception: pass
+        return False
 
     async def expand_content(self, page):
         """Click 'Load More' or 'View All' if present"""
