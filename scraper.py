@@ -347,10 +347,12 @@ class MBAScraper:
                         # No MBA filter for this specific primary section
                         sem_link = self.extract_semester_logic(txt)
                         abs_link = urljoin(self.current_url, a['href'])
+                        clean_title = re.sub(r'^\[.*?\]\s*', '', txt).strip()
+                        final_title = f"[Link] {clean_title}"[:100]
                         results.append({
-                            "title": f"[Link] {txt}", "link": abs_link,
+                            "title": final_title, "link": abs_link,
                             "semester": sem_link, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "class_time": "", "description": "Important SOL Announcement"
+                            "class_time": "", "description": "SOL Announcement"
                         })
             
             # 2. Important Notices / Information (Blue box to the right)
@@ -364,14 +366,19 @@ class MBAScraper:
                             txt = a.get_text().strip()
                             # APPLY MBA FILTER HERE
                             if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
-                                clean_txt = txt.replace("[Notice]", "").replace("Notice:", "").strip()
+                                raw_title = txt
                                 # Detect semester from notice title
-                                sem_notice = self.extract_semester_logic(clean_txt)
+                                sem_notice = self.extract_semester_logic(raw_title)
                                 abs_link = urljoin(self.current_url, a['href'])
+                                # Clean and Truncate Title
+                                clean_title = re.sub(r'^\[.*?\]\s*', '', raw_title).strip()
+                                clean_title = clean_title.replace("Notice:", "").strip()
+                                final_title = f"[Notice] {clean_title}"[:100]
+                                
                                 results.append({
-                                    "title": f"[Notice] {clean_txt}", "link": abs_link,
+                                    "title": final_title, "link": abs_link,
                                     "semester": sem_notice, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                                    "class_time": "", "description": f"MBA Official Notification"
+                                    "class_time": "", "description": "MBA Official Notification"
                                 })
 
         tables = soup.find_all("table")
@@ -417,10 +424,10 @@ class MBAScraper:
                     raw_href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
                     abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending"
                     
+                    final_title = f"[{current_table_date}] Sem {semester}: {subj}"[:100]
                     results.append({
-                        "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
-                        "link": abs_link, "semester": semester, "date": self.parse_date(str(current_table_date)),
-                        "class_time": time_txt, "description": f"MBA Live Class: {subj} (Teacher: {teacher})"
+                        "title": final_title, "link": abs_link, "semester": semester, "date": self.parse_date(str(current_table_date)),
+                        "class_time": time_txt, "description": f"Live Class: {subj} (Teacher: {teacher})"
                     })
         
         # Log if we found classes
@@ -438,12 +445,15 @@ class MBAScraper:
                 abs_link = urljoin(self.current_url, a['href'])
                 if not any(r['link'] == abs_link for r in results):
                     sem_link = self.extract_semester_logic(txt)
+                    # Clean and Truncate
+                    clean_title = re.sub(r'^\[.*?\]\s*', '', txt).strip()
+                    final_title = f"MBA Update: {clean_title}"[:100]
                     results.append({
-                        "title": f"MBA Update: {txt}", "link": abs_link,
+                        "title": final_title, "link": abs_link,
                         "semester": sem_link,
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                        "class_time": "", # Ensure class_time is always present
-                        "description": f"Latest MBA Resource/Link"
+                        "class_time": "",
+                        "description": "Latest MBA Resource"
                     })
 
         # --- YEAR FILTER ---
