@@ -38,10 +38,22 @@ except ImportError:
     pass
 
 try:
-    import requests # type: ignore
-    from curl_cffi import requests as cffi_requests # type: ignore
-    from bs4 import BeautifulSoup # type: ignore
-    import dateutil.parser as dparser # type: ignore
+    import requests
+except ImportError:
+    pass
+
+try:
+    from curl_cffi import requests as cffi_requests
+except ImportError:
+    pass
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    pass
+
+try:
+    import dateutil.parser as dparser
 except ImportError:
     pass
 
