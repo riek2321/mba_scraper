@@ -26,19 +26,19 @@ async def seed():
             print("[INFO]: No real notices in last 15 days. Seeding researched archive entries...")
             found_notices = [
                 {
-                    "title": "MBA Semester IV - Internal Assessment Final Notice",
+                    "title": "MBA Update: Semester IV - Internal Assessment Final Notice",
                     "link": "https://web.sol.du.ac.in/uploads/pdfs/2025/june/MBA%20IA%20Sem-IV.pdf",
                     "semester": "4",
                     "date": (datetime.datetime.now() - datetime.timedelta(days=2)).strftime("%Y-%m-%d")
                 },
                 {
-                    "title": "MBA Semester II - Revised Examination Schedule",
+                    "title": "MBA Update: Semester II - Revised Examination Schedule",
                     "link": "https://web.sol.du.ac.in/uploads/pdfs/2025/May/IA%20Schedule%20MBA%20SEM%20IV.pdf",
                     "semester": "2",
                     "date": (datetime.datetime.now() - datetime.timedelta(days=4)).strftime("%Y-%m-%d")
                 },
                 {
-                    "title": "MBA Semester I - Induction Program 2026",
+                    "title": "MBA Update: Semester I - Induction Program 2026",
                     "link": "https://web.sol.du.ac.in/uploads/pdfs/2024/revise-mba-datesheet.pdf",
                     "semester": "1",
                     "date": (datetime.datetime.now() - datetime.timedelta(days=6)).strftime("%Y-%m-%d")

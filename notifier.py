@@ -33,8 +33,8 @@ class Notifier:
         for i in range(max_retries):
             try:
                 response = requests.request(method, url, timeout=30, **kwargs)
-                # Success cases: 200/201 (Created), 409 (Conflict/Exists), 404 (Not Found/Deleted)
-                if response.status_code in [200, 201, 404, 409]:
+                # Success cases: 200/201 (Created), 204 (No Content), 404 (Not Found/Deleted), 409 (Conflict/Exists)
+                if response.status_code in [200, 201, 204, 404, 409]:
                     return response
                 print(f"[API][RETRY {i+1}]: {method} {url} returned {response.status_code}")
             except Exception as e:
@@ -78,7 +78,7 @@ class Notifier:
         url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"
         headers = {"x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("DELETE", url, headers=headers)
-        return resp is not None and resp.status_code == 200
+        return resp is not None and resp.status_code in [200, 204]
 
     def get_from_website(self, semester):
         url = f"{self.website_api_url}/api/sol/notifications/{semester}"

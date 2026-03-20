@@ -24,20 +24,26 @@ def reset_everything():
     total_deleted = 0
     
     for sem in semesters:
-        print(f"[RESET]: Fetching items from Semester {sem}...")
-        items = notifier.get_from_website(sem)
-        if not items:
-            print(f"  - No items found in Sem {sem}.")
-            continue
+        print(f"[RESET]: Clearing Semester {sem}...")
+        while True:
+            items = notifier.get_from_website(sem)
+            if not items:
+                print(f"  [✔]: Semester {sem} is empty.")
+                break
             
-        print(f"  - Found {len(items)} items. Deleting...")
-        for item in items:
-            item_id = item.get('_id') or item.get('id')
-            if item_id:
-                if notifier.delete_from_website(sem, item_id):
-                    total_deleted += 1
-                    
-        print(f"  [✔]: Semester {sem} cleared.")
+            print(f"  - Found {len(items)} items. Deleting batch...")
+            deleted_in_batch = 0
+            for item in items:
+                item_id = item.get('_id') or item.get('id')
+                if item_id:
+                    if notifier.delete_from_website(sem, item_id):
+                        deleted_in_batch += 1
+                        total_deleted += 1
+            
+            if deleted_in_batch == 0:
+                print("  [!] Warning: Found items but could not delete them. Breaking to avoid infinite loop.")
+                break
+            print(f"  - Batch complete ({deleted_in_batch} deleted). Re-checking...")
 
     print(f"\n[SUCCESS]: Reset complete. Total {total_deleted} items deleted from backend.")
     print("[INFO]: Next time you run the scraper, it will re-add everything from scratch.")

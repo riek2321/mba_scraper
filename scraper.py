@@ -348,7 +348,7 @@ class MBAScraper:
                         sem_link = self.extract_semester_logic(txt)
                         abs_link = urljoin(self.current_url, a['href'])
                         clean_title = re.sub(r'^\[.*?\]\s*', '', txt).strip()
-                        final_title = f"[Link] {clean_title}"[:100]
+                        final_title = f"MBA Update: {clean_title}"[:100]
                         results.append({
                             "title": final_title, "link": abs_link,
                             "semester": sem_link, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -373,7 +373,7 @@ class MBAScraper:
                                 # Clean and Truncate Title
                                 clean_title = re.sub(r'^\[.*?\]\s*', '', raw_title).strip()
                                 clean_title = clean_title.replace("Notice:", "").strip()
-                                final_title = f"[Notice] {clean_title}"[:100]
+                                final_title = f"MBA Update: {clean_title}"[:100]
                                 
                                 results.append({
                                     "title": final_title, "link": abs_link,
@@ -425,6 +425,10 @@ class MBAScraper:
                     abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending"
                     
                     final_title = f"[{current_table_date}] Sem {semester}: {subj}"[:100]
+                    # Ensure class links are also absolute
+                    if abs_link.startswith("/"):
+                        abs_link = urljoin("https://sol.du.ac.in", abs_link)
+
                     results.append({
                         "title": final_title, "link": abs_link, "semester": semester, "date": self.parse_date(str(current_table_date)),
                         "class_time": time_txt, "description": f"Live Class: {subj} (Teacher: {teacher})"
@@ -582,7 +586,6 @@ class MBAScraper:
             self.notices.extend(await self.run_class_chain()) # type: ignore
             await self.discover_and_crawl(max_pages=500) # Increased to 500 for deep site-wide check
             print(f"[SUMMARY]: Total MBA items captured: {len(self.notices)}")
-            return self.notices
 
         # Standard Website & Notices (10 min)
         if mode == "website":
@@ -600,13 +603,11 @@ class MBAScraper:
             # Also run a discovery crawl
             await self.discover_and_crawl(max_pages=75) # Increased logic
             print(f"[SUMMARY]: Total MBA items found in pulse: {len(self.notices)}")
-            return self.notices
 
         # Class Schedule Only (60 min)
         if mode == "classes":
             print("[OMNI]: Running CLASS SCHEDULE ONLY scan (60 min cycle)")
             self.notices.extend(await self.run_class_chain()) # type: ignore
-            return self.notices
 
         return self.notices
 
@@ -627,13 +628,14 @@ class MBAScraper:
             if h in synced and not getattr(self, "force_sync", False): # type: ignore
                 stats["skipped"] = int(stats["skipped"]) + 1; continue
             
-            print(f"[SYNC]: Sending '{item['title']}' to Backend (Sem {item['semester']})...")
+            print(f"[DEBUG-SYNC]: Title='{item['title']}' | Link='{item['link']}'")
             if notifier.sync_to_website(item):
                 synced.add(h); stats["new"] = int(stats["new"]) + 1 # type: ignore
-                print(f"  [✔ SYNC SUCCESS]")
+                print(f"  [OK SYNC SUCCESS]: {item['title'][:50]}...")
             else: 
                 stats["skipped"] = int(stats["skipped"]) + 1 # type: ignore
-                print(f"  [✖ SYNC FAILED]")
+                print(f"  [X SYNC FAILED]")
+            time.sleep(1.5) # Avoid rate limits
         print(f"[SYNC]: New={stats['new']} Skipped={stats['skipped']}")
         with open(memory_file, "w") as f:
             json.dump(list(synced), f)
