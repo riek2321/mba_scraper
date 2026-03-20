@@ -9,6 +9,7 @@ import base64
 import sys
 import argparse
 import time
+from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Any, Optional, Set
 from concurrent.futures import ThreadPoolExecutor
 
@@ -345,10 +346,11 @@ class MBAScraper:
                     if txt:
                         # No MBA filter for this specific primary section
                         sem_link = self.extract_semester_logic(txt)
+                        abs_link = urljoin(self.current_url, a['href'])
                         results.append({
-                            "title": f"[Important Link] {txt}", "link": a['href'],
+                            "title": f"[Link] {txt}", "link": abs_link,
                             "semester": sem_link, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "class_time": "", "description": "Found in main Important Links marquee (All captured)."
+                            "class_time": "", "description": "Important SOL Announcement"
                         })
             
             # 2. Important Notices / Information (Blue box to the right)
@@ -365,10 +367,11 @@ class MBAScraper:
                                 clean_txt = txt.replace("[Notice]", "").replace("Notice:", "").strip()
                                 # Detect semester from notice title
                                 sem_notice = self.extract_semester_logic(clean_txt)
+                                abs_link = urljoin(self.current_url, a['href'])
                                 results.append({
-                                    "title": f"[Notice] {clean_txt}", "link": a['href'],
+                                    "title": f"[Notice] {clean_txt}", "link": abs_link,
                                     "semester": sem_notice, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                                    "class_time": "", "description": f"MBA Notification (Sem {sem_notice})"
+                                    "class_time": "", "description": f"MBA Official Notification"
                                 })
 
         tables = soup.find_all("table")
@@ -411,13 +414,13 @@ class MBAScraper:
                     
                     time_txt = next((c.get_text(strip=True) for c in cells if re.search(r'\d{1,2}:\d{2}', c.get_text())), "")
                     teacher = cells[5].get_text(strip=True) if len(cells) > 5 else "Unknown"
-                    href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
-                    link = href if href else "#pending"
+                    raw_href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
+                    abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending"
                     
                     results.append({
                         "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
-                        "link": link, "semester": semester, "date": self.parse_date(str(current_table_date)),
-                        "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt} (Teacher: {teacher})"
+                        "link": abs_link, "semester": semester, "date": self.parse_date(str(current_table_date)),
+                        "class_time": time_txt, "description": f"MBA Live Class: {subj} (Teacher: {teacher})"
                     })
         
         # Log if we found classes
@@ -432,14 +435,15 @@ class MBAScraper:
             txt = a.get_text().strip()
             # APPLY MBA FILTER HERE
             if txt and any(kw.lower() in txt.lower() for kw in kw_list):
-                if not any(r['link'] == a['href'] for r in results):
+                abs_link = urljoin(self.current_url, a['href'])
+                if not any(r['link'] == abs_link for r in results):
                     sem_link = self.extract_semester_logic(txt)
                     results.append({
-                        "title": f"MBA Content: {txt}", "link": a['href'],
+                        "title": f"MBA Update: {txt}", "link": abs_link,
                         "semester": sem_link,
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                         "class_time": "", # Ensure class_time is always present
-                        "description": f"MBA update found on {curr_url} (Sem {sem_link})"
+                        "description": f"Latest MBA Resource/Link"
                     })
 
         # --- YEAR FILTER ---
