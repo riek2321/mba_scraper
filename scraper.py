@@ -348,8 +348,9 @@ class MBAScraper:
                             txt = a.get_text().strip()
                             # APPLY MBA FILTER HERE
                             if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
+                                clean_txt = txt.replace("[Notice]", "").replace("Notice:", "").strip()
                                 results.append({
-                                    "title": f"[Notice] {txt}", "link": a['href'],
+                                    "title": f"[Notice] {clean_txt}", "link": a['href'],
                                     "semester": "0", "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                                     "description": "Found in Important Notices section (MBA filtered)."
                                 })
@@ -581,4 +582,27 @@ class MBAScraper:
                 print(f"  [CLEANUP]: Deleted {len(deleted_ids)} old items from Semester {sem}")
 
 if __name__ == "__main__":
-    asyncio.run(MBAScraper().run())
+    import sys
+    from notifier import Notifier
+    
+    # Environment keys for CLI testing
+    SCRAPER_KEY = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
+    
+    async def standalone_run():
+        mode = "all"
+        if "--mode" in sys.argv:
+            idx = sys.argv.index("--mode")
+            if idx + 1 < len(sys.argv): mode = sys.argv[idx+1]
+        
+        scraper = MBAScraper(target_mode=mode)
+        results = await scraper.run()
+        
+        # standalone sync if running direct
+        if mode == "all":
+            notifier = Notifier(BACKEND_URL, SCRAPER_KEY)
+            scraper.sync_results(results, notifier, "synced_ids.json")
+            scraper.cleanup_old_data(notifier)
+            print("[OMNI]: Direct scan and sync completed.")
+
+    asyncio.run(standalone_run())
