@@ -1,0 +1,81 @@
+name: Refresh SOL Cookies 🍪
+on:
+  schedule:
+    - cron: '0 3,15 * * *' # Every 12 hours (3 AM and 3 PM IST approx)
+  workflow_dispatch: # Allow manual run
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+          
+      - name: Extract Fresh Cookies
+        id: extract
+        run: |
+          python3 - <<'EOF'
+          import asyncio
+          import os
+          from playwright.async_api import async_playwright
+          
+          async def get_cookies():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, args=['--no-sandbox'])
+                  context = await browser.new_context(
+                      user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                  )
+                  page = await context.new_page()
+                  
+                  print("Visiting SOL DU to refresh session...")
+                  try:
+                      # Visit the parent page to acquire AWSALB + PHPSESSID
+                      await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
+                                      wait_until="networkidle", timeout=90000)
+                      
+                      cookies = await context.cookies()
+                      # Filter for relevant cookies
+                      important = {c['name']: c['value'] for c in cookies 
+                                   if c['name'] in ['PHPSESSID', 'AWSALB', 'AWSALBCORS']}
+                      
+                      cookie_str = "; ".join(f"{k}={v}" for k,v in important.items())
+                      
+                      if 'PHPSESSID' in cookie_str:
+                          print(f"SUCCESS: Found session cookies.")
+                          # Use environment file to share with next step
+                          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                              f.write(f"cookies={cookie_str}\n")
+                      else:
+                          print("FAILED: Session cookies not found.")
+                          return False
+                  except Exception as e:
+                      print(f"ERROR: {e}")
+                      return False
+                  
+                  await browser.close()
+          
+          asyncio.run(get_cookies())
+          EOF
+
+      - name: Update GitHub Secret
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COOKIE_VALUE: ${{ steps.extract.outputs.cookies }}
+        run: |
+          if [ -z "$COOKIE_VALUE" ]; then
+            echo "Error: No cookies extracted"
+            exit 1
+          fi
+          gh secret set SOL_COOKIES --body "$COOKIE_VALUE"

@@ -43,15 +43,45 @@ class MBAScraper:
         self.notices = []
         self.days_back = 15 # Default
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.94 Safari/537.36"
-        # v52.0: Restored ScraperAPI as primary (WebScraping.ai as backup if key has dashes)
+        # v55.0: DIY ScraperAPI (Cloudflare Worker + Stealth Handshake)
         self.scraper_api_key = os.environ.get("SCRAPER_API_KEY", "")
-        print(f"[JOB]: Scraping API Key configured: {'YES' if self.scraper_api_key else 'NO (Will fail to fetch if WAF active)'}")
+        self.cf_worker_url = os.environ.get("CF_WORKER_URL", "")
+        self.sol_cookies = os.environ.get("SOL_COOKIES", "")
+        
+        print(f"[JOB]: Scraping API Key: {'YES' if self.scraper_api_key else 'NO'}")
+        print(f"[JOB]: Cloudflare Worker: {'YES' if self.cf_worker_url else 'NO'}")
+        print(f"[JOB]: Session Cookies: {'YES' if self.sol_cookies else 'NO'}")
         print(f"[JOB]: Scraper Backend Key configured: {'YES' if os.environ.get('SCRAPER_KEY') else 'NO'}")
         self.targets = [
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/my/team_schedules/vcs.php", # Direct Target (v19.1)
             "https://sol.du.ac.in/all-notices.php"
         ]
+
+    async def fetch_via_cf_worker(self, url: str) -> Optional[str]:
+        """V55.0: Residential-grade bypass via self-hosted Cloudflare Worker"""
+        if not self.cf_worker_url:
+            return None
+            
+        print(f"[CRAWLER][CF]: Proxying request via Worker for {url}...")
+        try:
+            loop = asyncio.get_event_loop()
+            def sync_get(u, cookies):
+                # Pass cookies to Worker via special header to remain stealthy
+                h = {"x-forward-cookie": cookies}
+                return requests.get(u, headers=h, timeout=45)
+                
+            response = await loop.run_in_executor(None, sync_get, f"{self.cf_worker_url}?url={url}", self.sol_cookies)
+            
+            if response.status_code == 200:
+                print(f"[CRAWLER][CF]: Success! Fetched {len(response.text)} chars.")
+                return response.text
+            else:
+                print(f"[CRAWLER][CF]: Worker returned status {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"[CRAWLER][CF][ERROR]: {e}")
+            return None
 
     async def fetch_via_api(self, url: str) -> Optional[str]:
         """V51.0: Level 3 Bypass via Scraping API (Supports ScraperAPI & WebScraping.ai)"""
@@ -279,7 +309,21 @@ class MBAScraper:
                     print(f"[CRAWLER][DIRECT]: Visiting target {url}")
                     
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # V50.0: Level 3 Bypass (Scraping API) - Try FIRST on server
+                        # V55.0: DIY ScraperAPI (Try FIRST)
+                        if self.cf_worker_url:
+                            cf_html = await self.fetch_via_cf_worker(url)
+                            if cf_html:
+                                try:
+                                    api_page = await context.new_page()
+                                    await api_page.set_content(cf_html)
+                                    await self.extract_online_classes(api_page)
+                                    await api_page.close()
+                                    print("[CRAWLER][CF]: SUCCESS! Data extracted via DIY Proxy.")
+                                    return self.notices
+                                except Exception as e:
+                                    print(f"[CRAWLER][CF][ERROR]: Extraction failed: {e}")
+
+                        # V50.0: Level 3 Bypass (Paid Scraping API) - Try SECOND
                         if self.scraper_api_key:
                             api_html = await self.fetch_via_api(url)
                             if api_html:

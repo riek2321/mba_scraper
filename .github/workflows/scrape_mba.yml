@@ -30,6 +30,8 @@ jobs:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
+          SOL_COOKIES: ${{ secrets.SOL_COOKIES }}
         run: |
           if [ -f scraper.py ]; then
             python scraper.py
