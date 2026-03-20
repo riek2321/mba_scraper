@@ -350,10 +350,12 @@ class MBAScraper:
                             # APPLY MBA FILTER HERE
                             if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
                                 clean_txt = txt.replace("[Notice]", "").replace("Notice:", "").strip()
+                                # Detect semester from notice title
+                                sem_notice = self.extract_semester_logic(clean_txt)
                                 results.append({
                                     "title": f"[Notice] {clean_txt}", "link": a['href'],
-                                    "semester": "0", "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                                    "class_time": "", "description": "Found in Important Notices section (MBA filtered)."
+                                    "semester": sem_notice, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                                    "class_time": "", "description": f"MBA Notification (Sem {sem_notice})"
                                 })
 
         tables = soup.find_all("table")
@@ -405,14 +407,16 @@ class MBAScraper:
         # General MBA filter for all other links
         for a in soup.find_all('a', href=True):
             txt = a.get_text().strip()
-            if any(kw.lower() in txt.lower() for kw in self.keywords):
+            # APPLY MBA FILTER HERE
+            if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
                 if not any(r['link'] == a['href'] for r in results):
+                    sem_link = self.extract_semester_logic(txt)
                     results.append({
                         "title": f"MBA Content: {txt}", "link": a['href'],
-                        "semester": self.extract_semester_logic(txt),
+                        "semester": sem_link,
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                         "class_time": "", # Ensure class_time is always present
-                        "description": f"MBA update found on {self.current_url}"
+                        "description": f"MBA update found on {self.current_url} (Sem {sem_link})"
                     })
 
         # --- YEAR FILTER ---
@@ -482,15 +486,35 @@ class MBAScraper:
         return results
 
     def extract_semester_logic(self, text: str) -> str:
-        # Priority 1: Check for explicit "Sem X" or "Semester X"
-        m = re.search(r'sem(?:ester)?\s*([1-4])', text, re.I)
+        if not text: return "0"
+        t = text.upper().replace("-", " ").replace(".", " ")
+        roman = {"I": "1", "II": "2", "III": "3", "IV": "4"}
+        
+        # 1. Look for SEM/SEMESTER/YEAR + I-IV or 1-4
+        m = re.search(r'(?:SEM(?:ESTER)?|YEAR|YR)\s*(IV|III|II|I|[1-4])', t)
+        if m:
+            val = m.group(1)
+            return roman.get(val, val)
+            
+        # 2. Look for Ordinals (1ST, 2ND, etc)
+        m = re.search(r'\b([1-4])(?:ST|ND|RD|TH)\b', t)
         if m: return m.group(1)
-        # Priority 2: Check for Ordinal "1st", "2nd", etc.
-        m = re.search(r'\b([1-4])(?:st|nd|rd|th)\b', text, re.I)
+        
+        # 3. Look for "MBA I", "MBA-1", etc
+        m = re.search(r'MBA\s*(IV|III|II|I|[1-4])', t)
+        if m:
+            val = m.group(1)
+            return roman.get(val, val)
+            
+        # 4. Standalone Roman if surrounded by boundaries
+        m = re.search(r'\b(IV|III|II|I)\b', t)
+        if m: return roman[m.group(1)]
+        
+        # 5. Standalone digit 1-4
+        m = re.search(r'\b([1-4])\b', t)
         if m: return m.group(1)
-        # Priority 3: Check for standalone digit 1-4
-        m = re.search(r'\b([1-4])\b', text)
-        return m.group(1) if m else "0"
+        
+        return "0"
 
     def _is_valid(self, html):
         return html and "sol" in html.lower() and len(html) > 500
