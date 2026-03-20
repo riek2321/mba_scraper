@@ -1,6 +1,8 @@
-name: Scrape MBA (Manual Full Run)
+name: Scrape MBA Classes (1 Hour)
 
 on:
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,7 +19,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           playwright install chromium
-      - name: Run Scraper (Full Mode)
+      - name: Run Scraper (Classes Mode)
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SCRAPER_KEY: ${{ secrets.SCRAPER_KEY }}
@@ -25,7 +27,7 @@ jobs:
           SCRAPER_ANT_KEY: ${{ secrets.SCRAPER_ANT_KEY }}
           WEBSCRAPING_AI_KEY: ${{ secrets.WEBSCRAPING_AI_KEY }}
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
-        run: python scraper.py --mode all
+        run: python scraper.py --mode classes
       - name: Commit Sync Memory
         run: |
           git config --global user.name 'github-actions'

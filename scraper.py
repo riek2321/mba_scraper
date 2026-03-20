@@ -6,7 +6,9 @@ import os
 import json
 import types
 import base64
-from typing import List, Dict, Any, Optional
+import sys
+import argparse
+from typing import List, Dict, Any, Optional, Set
 
 # Attempted imports for IDE support
 try:
@@ -39,8 +41,9 @@ except ImportError:
 
 class MBAScraper:
     """v70.0: OMNI-SCRAPER (The Finite Fallback Engine)"""
-    def __init__(self, base_url: str = "https://web.sol.du.ac.in/home"):
-        self.base_url = base_url
+    def __init__(self, target_mode: str = "all"):
+        self.target_mode = target_mode
+        self.base_url = "https://web.sol.du.ac.in/home"
         self.keywords = ['MBA', 'Master of Business Administration']
         self.visited = set()
         self.notices = []
@@ -199,9 +202,23 @@ class MBAScraper:
 
     # [DELETE] fetch_via_zyte - Removed per user request v70.1
 
+    def is_valid_html(self, html: str) -> bool:
+        """v70.4: Check if retrieved HTML is actual data, not a bot-check or redirect"""
+        if not html or len(html) < 200: return False
+        blocked_keywords = ["Google Search", "Wayback Machine", "captcha", "security check", "challenge-platform"]
+        # If it's a redirect/interstitial, it usually has these in the title/body
+        title_match = re.search(r"<title>(.*?)</title>", html, re.I)
+        title = title_match.group(1) if title_match else ""
+        if any(kw.lower() in title.lower() for kw in blocked_keywords): return False
+        
+        # Must contain some SOL specific text
+        low_html = html.lower()
+        if "sol" not in low_html and "university of delhi" not in low_html: return False
+        return True
+
     # --- BRIDGE & API FETCHER ---
     async def bridge_fetch(self, context, url: str) -> Optional[str]:
-        """v70.0: Chained Bridge Fetching Logic"""
+        """v70.4: Finite Fallback Chain with Validation"""
         strategies = [
             ("GHOST", lambda u: self.ghost_fetch(context, u)),
             ("TLS_ROTATION", self.fetch_via_tls_rotation),
@@ -217,14 +234,17 @@ class MBAScraper:
         for name, func in strategies:
             print(f"[OMNI][CHAIN]: Trying {name}...")
             try:
-                # Handle both async and sync strategies
                 if name == "GHOST":
-                    # For GHOST, the lambda handles the await internal to bridge_fetch call but we didn't await it there
                     html = await self.ghost_fetch(context, url)
                 else:
                     html = await func(url)
                 
-                if html: return html
+                if html:
+                    if self.is_valid_html(html):
+                        print(f"[OMNI][SUCCESS]: Strategy {name} recovered valid data.")
+                        return html
+                    else:
+                        print(f"[OMNI][CHAIN]: {name} returned invalid content (Redirect/BotCheck). Continuing...")
             except Exception as e:
                 print(f"[OMNI][CHAIN][ERROR]: {name} failed: {e}")
         return None
@@ -289,25 +309,60 @@ class MBAScraper:
 
             actual_targets = targets if targets else self.targets
             for url in actual_targets:
+                # v71.0: Mode-based filtering for scheduling
+                if self.target_mode == "classes" and "vcs.php" not in url: continue
+                if self.target_mode == "notices" and "vcs.php" in url: continue
+                
                 try:
                     if "vcs.php" in url or "online-class-schedule" in url:
-                        # Strategy 1: BridgeChain (Ghost, TLS, Cache, Wayback, APIs)
-                        html = await self.bridge_fetch(context, url)
-                        if html:
-                            print("[OMNI][SUCCESS]: Data obtained via BridgeChain.")
-                            temp_page = await context.new_page()
-                            await temp_page.set_content(html)
-                            await self.extract_online_classes(temp_page)
-                            await temp_page.close()
-                            continue
+                        # v71.0: ITERATIVE EXTRACTION - Keep trying until we get tables!
+                        strategies = [
+                            ("GHOST", lambda u: self.ghost_fetch(context, u)),
+                            ("TLS_ROTATION", self.fetch_via_tls_rotation),
+                            ("GOOGLE_CACHE", self.fetch_via_google_cache),
+                            ("WAYBACK", self.fetch_via_wayback),
+                            ("SCRAPERAPI", self.fetch_via_api),
+                            ("SCRAPER_ANT", self.fetch_via_scraperant),
+                            ("WEBSCRAPING_AI", self.fetch_via_webscraping_ai),
+                        ]
                         
-                        # Strategy 2: Sensory Human Flow (Direct)
-                        if await self.stealth_navigate_flow(page):
-                            await self.extract_online_classes(page)
-                            continue
+                        found_data = False
+                        for name, func in strategies:
+                            # Skip APIs if NO keys
+                            if ("API" in name or name in ["SCRAPER_ANT", "WEBSCRAPING_AI"]) and not any(self.keys.values()): 
+                                continue
+                                
+                            print(f"[OMNI][ITERATIVE]: Trying {name} for Class Schedule...")
+                            try:
+                                res = func(url)
+                                # v71.0: Correctly await if it's a coroutine or lambda-returned coroutine
+                                if asyncio.iscoroutine(res) or (hasattr(res, "__await__") and res.__await__):
+                                    html = await res
+                                else:
+                                    html = res
+                                
+                                if html and self.is_valid_html(html):
+                                    temp_page = await context.new_page()
+                                    await temp_page.set_content(html)
+                                    extracted = await self.extract_online_classes(temp_page)
+                                    await temp_page.close()
+                                    
+                                    if extracted and len(extracted) > 0: # type: ignore
+                                        print(f"[OMNI][SUCCESS]: {len(extracted)} classes found via {name}!") # type: ignore
+                                        found_data = True
+                                        break
+                                    else:
+                                        print(f"[OMNI][FAIL]: {name} returned HTML but 0 tables found. Trying next...")
+                            except Exception as e:
+                                print(f"[OMNI][ERR]: {name} failed: {e}")
+                        
+                        if not found_data:
+                            print("[OMNI][FINAL]: All fallbacks failed. Trying Direct Human Navigation...")
+                            if await self.stealth_navigate_flow(page):
+                                await self.extract_online_classes(page)
+                    
                     elif "home.php" in url:
                         await page.goto(url, wait_until="domcontentloaded")
-                        # v70.2: Extract Important Links specifically for home.php
                         await self.extract_legacy_notices(page)
                     else:
                         await page.goto(url, wait_until="domcontentloaded")
@@ -659,8 +714,8 @@ class MBAScraper:
         return obj.strftime("%Y-%m-%d") if obj else datetime.datetime.now().strftime("%Y-%m-%d")
 
     def sync_results(self, results: List[Dict[str, Any]], notifier: 'Notifier', memory_file: str):
-        """v70.2: Smart-Sync with Memory Protection"""
-        synced_memory: set = set()
+        """v72.0: Smart-Sync + Strict Midnight Cleanup & Data Preservation"""
+        synced_memory: Set[str] = set()
         if os.path.exists(memory_file):
             try:
                 with open(memory_file, 'r') as f:
@@ -668,7 +723,10 @@ class MBAScraper:
                     if isinstance(data, list): synced_memory = set(data)
             except Exception: pass
 
-        print(f"[JOB]: Processing {len(results)} scraped items...")
+        if not results:
+            print("[JOB]: 0 new items scraped. Proceeding with Strict Midnight Cleanup only.")
+        else:
+            print(f"[JOB]: Processing {len(results)} scraped items...")
         for sem in ["1", "2", "3", "4", "0"]:
             existing_items = notifier.get_from_website(sem)
             current_results = [r for r in results if r.get('semester') == sem]
@@ -695,12 +753,12 @@ class MBAScraper:
                     ext_link = str(matching_ext.get('link', ''))
                     if ("pending" in ext_link or "soon" in ext_link.lower()) and "teams.microsoft" in str(item.get('link', '')):
                         notifier.update_on_website(sem, ext_id, item)
-                    synced_memory.add(item_hash)
+                    synced_memory.add(item_hash) # type: ignore
                 else:
-                    if item_hash in synced_memory:
+                    if item_hash in synced_memory: # type: ignore
                         continue
                     if notifier.sync_to_website(item):
-                        synced_memory.add(item_hash)
+                        synced_memory.add(item_hash) # type: ignore
 
         with open(memory_file, 'w') as f:
             json.dump(list(synced_memory), f)
@@ -721,18 +779,21 @@ class MBAScraper:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["all", "classes", "notices"], default="all")
+    args = parser.parse_args()
+
     backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
     scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
-    print(f"[JOB]: Starting Omni-Scraper v70.2 | Backend: {backend_url}")
-    scraper = MBAScraper()
+    print(f"[JOB]: Starting Omni-Scraper v71.0 | Mode: {args.mode} | Backend: {backend_url}")
+    scraper = MBAScraper(target_mode=args.mode)
     notifier = Notifier(backend_url, scraper_key)
     
     try:
         results = asyncio.run(scraper.run())
-        if results:
-            scraper.sync_results(results, notifier, "synced_ids.json")
-        else:
-            print("[JOB]: No new items to process.")
+        # v72.0: Always sync results, even if empty, to trigger Auto-Cleanup (Date deletion)
+        # and to preserve older valid data as requested: "purana data hi use karegi"
+        scraper.sync_results(results, notifier, "synced_ids.json")
     except Exception as e:
         print(f"[JOB][FATAL]: {e}")
