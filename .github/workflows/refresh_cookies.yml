@@ -41,42 +41,48 @@ jobs:
                   
                   print("Step 1: Visiting Main Portal...")
                   try:
-                      await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
-                      await asyncio.sleep(5)
+                      r1 = await page.goto("https://sol.du.ac.in/home.php", wait_until="domcontentloaded", timeout=60000)
+                      print(f"Main Portal Status: {r1.status if r1 else 'No Response'}")
+                      await asyncio.sleep(8)
                       
                       print("Step 2: Visiting Subdomain Home...")
-                      await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
-                      await asyncio.sleep(5)
+                      r2 = await page.goto("https://web.sol.du.ac.in/home", wait_until="domcontentloaded", timeout=60000)
+                      print(f"Subdomain Home Status: {r2.status if r2 else 'No Response'}")
+                      await asyncio.sleep(8)
                       
                       print("Step 3: Visiting Schedule Page...")
-                      await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
+                      r3 = await page.goto("https://web.sol.du.ac.in/info/online-class-schedule", 
                                       wait_until="networkidle", timeout=60000)
+                      print(f"Schedule Page Status: {r3.status if r3 else 'No Response'}")
+                      
+                      # Diagnostic: Save screenshot for user to see if blocked
+                      # await page.screenshot(path="debug_sol.png") # Optional
+                      
                       await asyncio.sleep(5)
                       
                       cookies = await context.cookies()
                       print(f"Total cookies found: {len(cookies)}")
                       for c in cookies:
-                          print(f" - Found cookie: {c['name']}")
+                          print(f" - [{c['domain']}] {c['name']}")
                           
+                      # Broad Filter: Catch anything that looks like a session cookie
+                      session_names = ['PHPSESSID', 'AWSALB', 'AWSALBCORS', 'sol_session', 'csrf']
                       important = {c['name']: c['value'] for c in cookies 
-                                   if c['name'] in ['PHPSESSID', 'AWSALB', 'AWSALBCORS']}
+                                   if any(name.lower() in c['name'].lower() for name in session_names)}
+                      
+                      if not important:
+                          # If still nothing, take ANY cookie from sol.du.ac.in domains
+                          important = {c['name']: c['value'] for c in cookies if 'sol.du.ac.in' in c['domain']}
                       
                       cookie_str = "; ".join(f"{k}={v}" for k,v in important.items())
                       
-                      if 'PHPSESSID' in cookie_str or 'AWSALB' in cookie_str:
-                          print(f"SUCCESS: Found session cookies.")
+                      if cookie_str:
+                          print(f"SUCCESS: Captured {len(important)} cookies.")
                           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                               f.write(f"cookies={cookie_str}\n")
                       else:
-                          # If no session cookies, then try a more broad catch
-                          print("WARNING: Specific session cookies not found. Using all available cookies.")
-                          all_cookies = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
-                          if all_cookies:
-                              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                                  f.write(f"cookies={all_cookies}\n")
-                          else:
-                              print("FAILED: No cookies found at all.")
-                              exit(1)
+                          print("FAILED: No relevant cookies found.")
+                          exit(1)
                   except Exception as e:
                       print(f"ERROR: {e}")
                       exit(1)
