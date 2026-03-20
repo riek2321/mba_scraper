@@ -620,6 +620,7 @@ class MBAScraper:
                 item_id = item.get('_id') or item.get('id')
                 if not item_id: continue
                 
+                to_delete = False
                 # Parse date from item
                 date_str = item.get('date', '')
                 try:
@@ -628,11 +629,10 @@ class MBAScraper:
                     # Rule 1: General notices older than 30 days
                     if sem == "0" and item_date < thirty_days_ago:
                         to_delete = True
-                    # Rule 2: Class schedules in the past
+                    # Rule 2: Class schedules in the past (Delete after midnight of class date)
                     elif sem != "0" and item_date.date() < now.date():
                         to_delete = True
                     # Rule 3: MISPLACED ITEMS (New!)
-                    # If an item is in Sem 0 but our logic says it belongs in 1-4, delete it from Sem 0
                     elif sem == "0":
                         correct_sem = self.extract_semester_logic(item.get('title', ''))
                         if correct_sem != "0":
