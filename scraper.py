@@ -615,13 +615,19 @@ class MBAScraper:
                 try:
                     item_date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
                     
-                    to_delete = False
                     # Rule 1: General notices older than 30 days
                     if sem == "0" and item_date < thirty_days_ago:
                         to_delete = True
                     # Rule 2: Class schedules in the past
                     elif sem != "0" and item_date.date() < now.date():
                         to_delete = True
+                    # Rule 3: MISPLACED ITEMS (New!)
+                    # If an item is in Sem 0 but our logic says it belongs in 1-4, delete it from Sem 0
+                    elif sem == "0":
+                        correct_sem = self.extract_semester_logic(item.get('title', ''))
+                        if correct_sem != "0":
+                            print(f"  [CLEANUP]: Detected misplaced item '{item.get('title')}' in Sem 0. Deleting for re-sync to Sem {correct_sem}.")
+                            to_delete = True
                     
                     if to_delete:
                         if notifier.delete_from_website(sem, item_id):
