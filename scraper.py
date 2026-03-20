@@ -413,10 +413,12 @@ class MBAScraper:
             print(f"  [✔ FOUND]: Extracted {class_count} MBA classes from schedule.")
         
         # General MBA filter for all other links
+        kw_list = self.keywords # Localize for Pyre/lint
+        curr_url = self.current_url
         for a in soup.find_all('a', href=True):
             txt = a.get_text().strip()
             # APPLY MBA FILTER HERE
-            if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
+            if txt and any(kw.lower() in txt.lower() for kw in kw_list):
                 if not any(r['link'] == a['href'] for r in results):
                     sem_link = self.extract_semester_logic(txt)
                     results.append({
@@ -424,26 +426,25 @@ class MBAScraper:
                         "semester": sem_link,
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                         "class_time": "", # Ensure class_time is always present
-                        "description": f"MBA update found on {self.current_url} (Sem {sem_link})"
+                        "description": f"MBA update found on {curr_url} (Sem {sem_link})"
                     })
 
         # --- YEAR FILTER ---
         # Only keep items from the current year (2026)
         filtered_results = []
+        seen_links = set() # Avoid duplicates across different crawler paths
         for item in results:
+            if item['link'] in seen_links: continue
+            
             item_date = item.get('date', '')
             try:
-                # If date is in YYYY-MM-DD format
                 item_year = int(item_date.split('-')[0])
             except (ValueError, IndexError):
-                item_year = self.current_year # Default to current year if parsing fails
+                item_year = self.current_year
             
             if item_year == self.current_year:
                 filtered_results.append(item)
-            else:
-                # Optionally log filtered out items
-                # print(f"  [FILTERED]: Skipping old item from {item_year}: {item['title']}")
-                pass
+                seen_links.add(item['link'])
         
         return filtered_results
 
@@ -467,7 +468,7 @@ class MBAScraper:
         for rows in tables:
             current_table_date = None
             for cells_raw in rows:
-                cells = list(cells_raw) # type: ignore
+                cells = list(cells_raw)
                 combined_text = " ".join(str(c.get("text", "")) for c in cells)
                 
                 # Check for date header
@@ -480,17 +481,25 @@ class MBAScraper:
                 if not current_table_date or len(cells) < 4:
                     continue
                     
-                course = str(cells[0].get("text", "")) # type: ignore
-                if not any(kw.lower() in course.lower() for kw in self.keywords): continue
-                sem, subj = str(cells[1].get("text", "")), str(cells[2].get("text", "")) # type: ignore
-                time_txt = next((str(c.get("text", "")) for c in cells if re.search(r'\d{1,2}:\d{2}', str(c.get("text", "")))), "") # type: ignore
-                href = next((str(c["href"]) for c in list(reversed(cells)) if c.get("href") and "teams.microsoft" in str(c["href"])), "#pending") # type: ignore
-                semester = self.extract_semester_logic(sem or course)
-                results.append({
-                    "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
-                    "link": href, "semester": semester, "date": self.parse_date(str(current_table_date)),
-                    "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
-                })
+                # Index 0: Course, Index 1: Semester, Index 2: Subject
+                course = str(cells[0].get("text", "")).strip()
+                sem_raw = str(cells[1].get("text", "")).strip()
+                subj = str(cells[2].get("text", "")).strip()
+                
+                if any(kw.lower() in course.lower() for kw in self.keywords):
+                    # Correct Semester Mapping
+                    semester = self.extract_semester_logic(sem_raw)
+                    if semester == "0": semester = self.extract_semester_logic(course)
+                    if semester == "0": semester = self.extract_semester_logic(subj)
+                    
+                    time_txt = next((str(c.get("text", "")) for c in cells if re.search(r'\d{1,2}:\d{2}', str(c.get("text", "")))), "")
+                    href = next((str(c["href"]) for c in list(reversed(cells)) if c.get("href") and "teams.microsoft" in str(c["href"])), "#pending")
+                    
+                    results.append({
+                        "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
+                        "link": href, "semester": semester, "date": self.parse_date(str(current_table_date)),
+                        "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
+                    })
         return results
 
     def extract_semester_logic(self, text: str) -> str:
@@ -498,8 +507,8 @@ class MBAScraper:
         t = text.upper().replace("-", " ").replace(".", " ")
         roman = {"I": "1", "II": "2", "III": "3", "IV": "4"}
         
-        # 1. Look for SEM/SEMESTER/YEAR + I-IV or 1-4
-        m = re.search(r'(?:SEM(?:ESTER)?|YEAR|YR)\s*(IV|III|II|I|[1-4])', t)
+        # 1. Look for SEM/SEMESTER/YEAR + I-IV or 1-4 (Strict word boundary)
+        m = re.search(r'\b(?:SEM(?:ESTER)?|YEAR|YR)\s*(IV|III|II|I|[1-4])\b', t)
         if m:
             val = m.group(1)
             return roman.get(val, val)
@@ -518,7 +527,7 @@ class MBAScraper:
         m = re.search(r'\b(IV|III|II|I)\b', t)
         if m: return roman[m.group(1)]
         
-        # 5. Standalone digit 1-4
+        # 5. Last Resort: Standalone digit 1-4 (Avoid 202x years)
         m = re.search(r'\b([1-4])\b', t)
         if m: return m.group(1)
         
