@@ -108,7 +108,7 @@ class MBAScraper:
     async def fetch_via_tls_rotation(self, url: str) -> Optional[str]:
         """v75.0: Scrapy-Standard TLS Fingerprinting (Bypass common WAFs)"""
         # Scrapy-standard JA3 profiles for high-end stealth
-        ja3_fingerprints = ["chrome120", "chrome116", "safari15", "firefox117", "edge101"]
+        ja3_fingerprints = ["chrome120", "chrome116", "firefox117", "edge101"]
         selected = random.choice(ja3_fingerprints)
         print(f"[OMNI][TLS]: Using Scrapy-standard fingerprint {selected}...")
         try:
@@ -1059,19 +1059,32 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["all", "classes", "notices"], default="all")
     parser.add_argument("--force", action="store_true", help="Force sync all items (ignore memory)")
+    parser.add_argument("--daemon", action="store_true", help="Run in infinite loop (Never-stop Mode)")
+    parser.add_argument("--interval", type=int, default=3600, help="Interval in seconds for daemon mode (default 3600s)")
     args = parser.parse_args()
 
     backend_url = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
     scraper_key = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
     
-    print(f"[JOB]: Starting Omni-Scraper v80.0 'Omniscient' | Mode: {args.mode} | Backend: {backend_url}")
-    scraper = MBAScraper(target_mode=args.mode, force_sync=args.force)
-    notifier = Notifier(backend_url, scraper_key)
-    
-    try:
-        results = asyncio.run(scraper.run())
-        # v72.0: Always sync results, even if empty, to trigger Auto-Cleanup (Date deletion)
-        # and to preserve older valid data as requested: "purana data hi use karegi"
-        scraper.sync_results(results, notifier, "synced_ids.json")
-    except Exception as e:
-        print(f"[JOB][FATAL]: {e}")
+    async def run_job():
+        print(f"\n[JOB][{datetime.datetime.now()}]: Starting Omni-Scraper v80.1 | Mode: {args.mode}")
+        scraper = MBAScraper(target_mode=args.mode, force_sync=args.force)
+        notifier = Notifier(backend_url, scraper_key)
+        try:
+            results = await scraper.run()
+            scraper.sync_results(results, notifier, "synced_ids.json")
+        except Exception as e:
+            print(f"[JOB][FATAL]: {e}")
+
+    if args.daemon:
+        print(f"[OMNI][DAEMON]: Entering Infinite Loop (Interval: {args.interval}s)...")
+        while True:
+            try:
+                asyncio.run(run_job())
+            except Exception as e:
+                print(f"[OMNI][DAEMON][ERROR]: Loop iteration failed: {e}")
+            print(f"[OMNI][DAEMON]: Sleeping for {args.interval}s...")
+            import time
+            time.sleep(args.interval)
+    else:
+        asyncio.run(run_job())
