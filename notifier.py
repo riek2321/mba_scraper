@@ -52,10 +52,15 @@ class Notifier:
         }
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("POST", url, json=payload, headers=headers)
-        status = resp.status_code if resp else "FAILED"
-        print(f"  [API]: POST {url} | Result: {status}")
-        # Success if 201 (Created) or 409 (Conflict = Already exists)
-        return resp is not None and resp.status_code in [201, 409]
+        
+        if resp is not None:
+            status = resp.status_code
+            print(f"  [API]: POST {url} | Result: {status}")
+            # Success if 201 (Created) or 409 (Conflict = Already exists)
+            return status in [201, 409]
+        else:
+            print(f"  [API]: POST {url} | Result: FAILED (No response from backend)")
+            return False
 
     def update_on_website(self, semester, item_id, notice_data):
         url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"

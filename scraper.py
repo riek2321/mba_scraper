@@ -330,11 +330,12 @@ class MBAScraper:
             if imp_links_div:
                 for a in imp_links_div.find_all('a', href=True): # type: ignore
                     txt = a.get_text().strip()
-                    if txt:
+                    # APPLY MBA FILTER HERE
+                    if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
                         results.append({
-                            "title": f"[Important Link] {txt}", "link": a['href'],
+                            "title": f"MBA Content: {txt}", "link": a['href'],
                             "semester": "0", "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "description": "Found in Important Links section."
+                            "class_time": "", "description": "General MBA related link identified."
                         })
             
             # 2. Important Notices / Information (Blue box to the right)
@@ -352,10 +353,16 @@ class MBAScraper:
                                 results.append({
                                     "title": f"[Notice] {clean_txt}", "link": a['href'],
                                     "semester": "0", "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                                    "description": "Found in Important Notices section (MBA filtered)."
+                                    "class_time": "", "description": "Found in Important Notices section (MBA filtered)."
                                 })
 
-        for table in soup.find_all("table"):
+        tables = soup.find_all("table")
+        if "vcs.php" in self.current_url.lower():
+            print(f"  [DEBUG]: Scanned {len(tables)} tables on schedule page.")
+            if len(tables) == 0:
+                print("  [DEBUG]: No tables found. HTML length:", len(html))
+        
+        for table_idx, table in enumerate(tables):
             rows = table.find_all("tr")
             current_table_date: Optional[str] = None
             for row in rows:
@@ -365,6 +372,8 @@ class MBAScraper:
                     m = re.search(r'(\d{1,2}[-/]\d{2}[-/]\d{4})', txt)
                     if m:
                         current_table_date = m.group(1)
+                        if "vcs.php" in self.current_url.lower():
+                            print(f"    [DEBUG]: Found Date: {current_table_date} in Table {table_idx}")
                         continue # Header row, move to next
                 
                 if not current_table_date:
@@ -402,6 +411,7 @@ class MBAScraper:
                         "title": f"MBA Content: {txt}", "link": a['href'],
                         "semester": self.extract_semester_logic(txt),
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                        "class_time": "", # Ensure class_time is always present
                         "description": f"MBA update found on {self.current_url}"
                     })
 
@@ -472,7 +482,14 @@ class MBAScraper:
         return results
 
     def extract_semester_logic(self, text: str) -> str:
-        m = re.search(r'\b([1-4])(?:st|nd|rd|th)?\b', text, re.I)
+        # Priority 1: Check for explicit "Sem X" or "Semester X"
+        m = re.search(r'sem(?:ester)?\s*([1-4])', text, re.I)
+        if m: return m.group(1)
+        # Priority 2: Check for Ordinal "1st", "2nd", etc.
+        m = re.search(r'\b([1-4])(?:st|nd|rd|th)\b', text, re.I)
+        if m: return m.group(1)
+        # Priority 3: Check for standalone digit 1-4
+        m = re.search(r'\b([1-4])\b', text)
         return m.group(1) if m else "0"
 
     def _is_valid(self, html):
@@ -529,7 +546,10 @@ class MBAScraper:
             except Exception: pass
         stats = {"new": 0, "skipped": 0}
         for item in results:
-            h = base64.b64encode(f"{item['semester']}:{item['title']}:{item['date']}:{item['class_time']}".encode()).decode()
+            # Hash to avoid dupes (base64 of Sem + Title + Date + Time)
+            sem, title = item.get('semester', '0'), item.get('title', 'Unknown')
+            dt, tm = item.get('date', ''), item.get('class_time', '')
+            h = base64.b64encode(f"{sem}:{title}:{dt}:{tm}".encode()).decode()
             if h in synced and not getattr(self, "force_sync", False): # type: ignore
                 stats["skipped"] = int(stats["skipped"]) + 1; continue
             
@@ -583,7 +603,6 @@ class MBAScraper:
 
 if __name__ == "__main__":
     import sys
-    from notifier import Notifier
     
     # Environment keys for CLI testing
     SCRAPER_KEY = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
@@ -600,11 +619,15 @@ if __name__ == "__main__":
         
         # standalone sync if running direct (sync for all modes that produce items)
         if results:
-            notifier = Notifier(BACKEND_URL, SCRAPER_KEY)
-            scraper.sync_results(results, notifier, "synced_ids.json")
-            if mode == "all":
-                scraper.cleanup_old_data(notifier)
-            print(f"[OMNI]: Direct scan ({mode}) and sync completed.")
+            # Notifier is imported at the top of the file
+            try:
+                notifier = Notifier(BACKEND_URL, SCRAPER_KEY)
+                scraper.sync_results(results, notifier, "synced_ids.json")
+                if mode == "all":
+                    scraper.cleanup_old_data(notifier)
+                print(f"[OMNI]: Direct scan ({mode}) and sync completed.")
+            except NameError:
+                print("[ERROR]: Notifier class not found. Sync skipped.")
         else:
             print(f"[OMNI]: No items to sync for mode '{mode}'.")
 
