@@ -410,13 +410,14 @@ class MBAScraper:
                     if semester == "0": semester = self.extract_semester_logic(subj)
                     
                     time_txt = next((c.get_text(strip=True) for c in cells if re.search(r'\d{1,2}:\d{2}', c.get_text())), "")
+                    teacher = cells[5].get_text(strip=True) if len(cells) > 5 else "Unknown"
                     href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
                     link = href if href else "#pending"
                     
                     results.append({
                         "title": f"[{current_table_date}] MBA Sem {semester}: {subj} ({time_txt})",
                         "link": link, "semester": semester, "date": self.parse_date(str(current_table_date)),
-                        "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt}"
+                        "class_time": time_txt, "description": f"MBA Live Class: {subj} at {time_txt} (Teacher: {teacher})"
                     })
         
         # Log if we found classes
@@ -517,20 +518,26 @@ class MBAScraper:
     def extract_semester_logic(self, text: str) -> str:
         if not text: return "0"
         t = text.upper().replace("-", " ").replace(".", " ")
+        # Handle some common cases before regex
+        if "1ST" in t or "FIRST" in t: return "1"
+        if "2ND" in t or "SECOND" in t: return "2"
+        if "3RD" in t or "THIRD" in t: return "3"
+        if "4TH" in t or "FOURTH" in t: return "4"
+
         roman = {"I": "1", "II": "2", "III": "3", "IV": "4"}
         
-        # 1. Look for SEM/SEMESTER/YEAR + I-IV or 1-4 (Strict word boundary)
-        m = re.search(r'\b(?:SEM(?:ESTER)?|YEAR|YR)\s*(IV|III|II|I|[1-4])\b', t)
+        # 1. Look for SEM/SEMESTER/YEAR/PART + I-IV or 1-4
+        m = re.search(r'(?:SEM(?:ESTER)?|YEAR|YR|PART)\s*(IV|III|II|I|[1-4])\b', t)
         if m:
             val = m.group(1)
             return roman.get(val, val)
             
-        # 2. Look for Ordinals (1ST, 2ND, etc)
+        # 2. Look for Ordinals (1ST, 2ND, etc - redundant but safe)
         m = re.search(r'\b([1-4])(?:ST|ND|RD|TH)\b', t)
         if m: return m.group(1)
         
-        # 3. Look for "MBA I", "MBA-1", etc
-        m = re.search(r'MBA\s*(IV|III|II|I|[1-4])', t)
+        # 3. Look for "MBA I", "MBA 1", etc
+        m = re.search(r'MBA\s*(IV|III|II|I|[1-4])\b', t)
         if m:
             val = m.group(1)
             return roman.get(val, val)
@@ -650,6 +657,17 @@ class MBAScraper:
                         if correct_sem != "0":
                             print(f"  [CLEANUP]: Detected misplaced item '{item.get('title')}' in Sem 0. Deleting for re-sync to Sem {correct_sem}.")
                             to_delete = True
+                        # Rule 4: Past Class in Sem 0 (Emergency Purge)
+                        # If a Sem 0 item title starts with a date like [20-03-2026] and that date is passed
+                        elif "[" in str(item.get('title')):
+                            m_date = re.search(r'\[(\d{1,2}[-/]\d{2}[-/]\d{4})\]', str(item.get('title')))
+                            if m_date:
+                                try:
+                                    parsed_m_date = dparser.parse(m_date.group(1), dayfirst=True)
+                                    if parsed_m_date.date() < now.date():
+                                        print(f"  [CLEANUP]: Detected expired class record '{item.get('title')}' in Sem 0. Purging.")
+                                        to_delete = True
+                                except Exception: pass
                     
                     if to_delete:
                         if notifier.delete_from_website(sem, item_id):
