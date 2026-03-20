@@ -325,17 +325,18 @@ class MBAScraper:
         # SPECIAL: Target "Important Links" and "Important Notices" on home.php (Full capture)
         is_home = "home.php" in self.current_url.lower()
         if is_home:
-            # 1. Marquee / Important Links
+            # 1. Marquee / Important Links (Pink box - Capture ALL as requested)
             imp_links_div = soup.find(id="important-links")
             if imp_links_div:
                 for a in imp_links_div.find_all('a', href=True): # type: ignore
                     txt = a.get_text().strip()
-                    # APPLY MBA FILTER HERE
-                    if txt and any(kw.lower() in txt.lower() for kw in self.keywords):
+                    if txt:
+                        # No MBA filter for this specific primary section
+                        sem_link = self.extract_semester_logic(txt)
                         results.append({
-                            "title": f"MBA Content: {txt}", "link": a['href'],
-                            "semester": "0", "date": datetime.datetime.now().strftime("%Y-%m-%d"),
-                            "class_time": "", "description": "General MBA related link identified."
+                            "title": f"[Important Link] {txt}", "link": a['href'],
+                            "semester": sem_link, "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                            "class_time": "", "description": "Found in main Important Links marquee (All captured)."
                         })
             
             # 2. Important Notices / Information (Blue box to the right)
