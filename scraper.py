@@ -383,14 +383,21 @@ class MBAScraper:
                 
                 cells = row.find_all(["td", "th"])
                 if len(cells) < 4: continue
+                # NEW MAPPING based on live inspection:
+                # 0: Course, 1: Year/Sem, 2: Subject, 4: Time (Approx)
                 course = cells[0].get_text(strip=True)
+                sem_raw = cells[1].get_text(strip=True)
+                subj = cells[2].get_text(strip=True)
                 
                 # Check MBA filter
                 if any(kw.lower() in course.lower() for kw in self.keywords):
-                    sem, subj = cells[1].get_text(strip=True), cells[2].get_text(strip=True)
+                    # Robust Semester Detection: Check sem column, course, AND subject
+                    semester = self.extract_semester_logic(sem_raw)
+                    if semester == "0": semester = self.extract_semester_logic(course)
+                    if semester == "0": semester = self.extract_semester_logic(subj)
+                    
                     time_txt = next((c.get_text(strip=True) for c in cells if re.search(r'\d{1,2}:\d{2}', c.get_text())), "")
                     href = next((a["href"] for c in reversed(cells) for a in [c.find("a")] if a and a.get("href")), "#pending")
-                    semester = self.extract_semester_logic(sem or course)
                     link = href if href else "#pending"
                     
                     results.append({
