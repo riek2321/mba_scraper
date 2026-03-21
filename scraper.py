@@ -1706,7 +1706,7 @@ puppeteer.use(StealthPlugin());
                     if txt:
                         abs_link = urljoin(self.current_url, a["href"])
                         results.append({
-                            "title": f"MBA Update: {re.sub(r'^\\[.*?\\]\\s*', '', txt).strip()}"[:100],
+                            "title": ("MBA Update: " + re.sub(r'^\[.*?\]\s*', '', txt).strip())[:100],
                             "link": abs_link,
                             "semester": self.extract_semester_logic(txt),
                             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
