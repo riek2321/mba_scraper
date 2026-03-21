@@ -2,7 +2,6 @@ name: MBA Scraper
 
 on:
   schedule:
-    # Har 10 minute pe website+notices scan
     - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
@@ -34,25 +33,21 @@ jobs:
       SOL_COOKIES: ${{ secrets.SOL_COOKIES }}
 
     steps:
-      # ── 1. Checkout ──────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Python setup ──────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      # ── 3. System dependencies ───────────────────
-      - name: Install system dependencies
+      - name: Install system dependencies (Ubuntu 24.04 compatible)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             xvfb \
             x11-utils \
-            libgconf-2-4 \
             libatk1.0-0 \
             libatk-bridge2.0-0 \
             libcups2 \
@@ -63,7 +58,6 @@ jobs:
             libxfixes3 \
             libxrandr2 \
             libgbm1 \
-            libasound2 \
             libpango-1.0-0 \
             libcairo2 \
             libnspr4 \
@@ -73,13 +67,13 @@ jobs:
             unzip \
             nodejs \
             npm
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2 || true
+          sudo apt-get install -y libgconf-2-4 || true
 
-      # ── 4. Node.js tools (for Puppeteer) ─────────
       - name: Install Node.js tools
         run: |
           npm install -g puppeteer-core puppeteer-extra puppeteer-extra-plugin-stealth 2>/dev/null || true
 
-      # ── 5. Python packages ────────────────────────
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip --quiet
@@ -100,7 +94,6 @@ jobs:
             scrapling \
             fp-proxy \
             || true
-          # Install heavier packages separately (may fail on some envs)
           pip install --quiet patchright || true
           pip install --quiet nodriver || true
           pip install --quiet "camoufox[geoip]" || true
@@ -109,7 +102,6 @@ jobs:
           pip install --quiet botasaurus || true
           pip install --quiet proxybroker2 || true
 
-      # ── 6. Browser installation ───────────────────
       - name: Install Playwright browsers
         run: |
           playwright install chromium --with-deps
@@ -125,19 +117,16 @@ jobs:
 
       - name: Install Camoufox browser
         run: |
-          python -c "from camoufox.sync_api import Camoufox; pass" 2>/dev/null || true
           python -m camoufox fetch || true
 
-      # ── 7. Restore synced_ids cache ───────────────
       - name: Restore synced IDs cache
         uses: actions/cache@v4
         with:
-          path: synced_ids.json
+          path: mba_scraper/synced_ids.json
           key: synced-ids-${{ github.run_id }}
           restore-keys: |
             synced-ids-
 
-      # ── 8. Determine mode ─────────────────────────
       - name: Determine scraper mode
         id: mode
         run: |
@@ -145,7 +134,7 @@ jobs:
           MINUTE=$(date +%-M)
           if [ -n "$INPUT_MODE" ]; then
             MODE="$INPUT_MODE"
-          elif [ "$((MINUTE % 60))" -eq "0" ] || [ "$MINUTE" -eq "0" ]; then
+          elif [ "$MINUTE" -eq "0" ]; then
             MODE="all"
           else
             MODE="website"
@@ -153,11 +142,10 @@ jobs:
           echo "mode=$MODE" >> $GITHUB_OUTPUT
           echo "[WORKFLOW]: Running in mode: $MODE"
 
-      # ── 9. Run scraper ────────────────────────────
       - name: Run scraper
         run: |
           cd mba_scraper
-          echo "[WORKFLOW]: Starting scraper in mode: ${{ steps.mode.outputs.mode }}"
+          echo "[WORKFLOW]: Starting in mode: ${{ steps.mode.outputs.mode }}"
           if [ -f scraper.py ]; then
             python scraper.py --mode ${{ steps.mode.outputs.mode }}
           else
@@ -165,10 +153,9 @@ jobs:
             exit 1
           fi
 
-      # ── 10. Save synced_ids cache ─────────────────
       - name: Save synced IDs cache
         if: always()
         uses: actions/cache@v4
         with:
-          path: synced_ids.json
+          path: mba_scraper/synced_ids.json
           key: synced-ids-${{ github.run_id }}
