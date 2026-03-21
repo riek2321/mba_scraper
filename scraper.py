@@ -32,7 +32,7 @@ except ImportError:
 try:
     from patchright.async_api import async_playwright as patchright_playwright  # type: ignore
 except ImportError:
-    pass
+    patchright_playwright = None  # type: ignore
 
 try:
     from notifier import Notifier  # type: ignore
@@ -47,7 +47,7 @@ except ImportError:
 try:
     from curl_cffi import requests as cffi_requests  # type: ignore
 except ImportError:
-    pass
+    cffi_requests = None  # type: ignore
 
 try:
     from bs4 import BeautifulSoup  # type: ignore
@@ -62,77 +62,80 @@ except ImportError:
 try:
     import httpx  # type: ignore
 except ImportError:
-    pass
+    httpx = None  # type: ignore
 
 try:
     import cloudscraper as cloudscraper_lib  # type: ignore
 except ImportError:
-    pass
+    cloudscraper_lib = None  # type: ignore
 
 try:
     import tls_client as tls_client_lib  # type: ignore
 except ImportError:
-    pass
+    tls_client_lib = None  # type: ignore
 
 try:
     import nodriver as uc_nodriver  # type: ignore
 except ImportError:
-    pass
+    uc_nodriver = None  # type: ignore
 
 try:
     from camoufox.async_api import AsyncCamoufox  # type: ignore
 except ImportError:
-    pass
+    AsyncCamoufox = None  # type: ignore
 
 try:
     from seleniumbase import Driver as SBDriver  # type: ignore
 except ImportError:
-    pass
+    SBDriver = None  # type: ignore
 
 try:
     import undetected_chromedriver as uc_chrome  # type: ignore
 except ImportError:
-    pass
+    uc_chrome = None  # type: ignore
 
 try:
     from DrissionPage import ChromiumPage, ChromiumOptions  # type: ignore
 except ImportError:
-    pass
+    ChromiumPage = None  # type: ignore
+    ChromiumOptions = None  # type: ignore
 
 try:
     from botasaurus.request import request as botasaurus_request, AntiDetectRequests  # type: ignore
 except ImportError:
-    pass
+    botasaurus_request = None  # type: ignore
+    AntiDetectRequests = None  # type: ignore
 
 try:
     from pydoll.browser.chrome import Chrome as PydollChrome  # type: ignore
 except ImportError:
-    pass
+    PydollChrome = None  # type: ignore
 
 try:
     from scrapling import StealthyFetcher, PlayWrightFetcher  # type: ignore
 except ImportError:
-    pass
+    StealthyFetcher = None  # type: ignore
+    PlayWrightFetcher = None  # type: ignore
 
 try:
     import seleniumwire.undetected_chromedriver as swire_uc  # type: ignore
 except ImportError:
-    pass
+    swire_uc = None  # type: ignore
 
 try:
     import pychrome as pychrome_lib  # type: ignore
 except ImportError:
-    pass
+    pychrome_lib = None  # type: ignore
 
 try:
     from fp.fp import FreeProxy  # type: ignore
 except ImportError:
-    pass
+    FreeProxy = None  # type: ignore
 
 try:
     import proxybroker as pb_lib  # type: ignore
 except ImportError:
-    pass
+    pb_lib = None  # type: ignore
 
 
 # ─────────────────────────────────────────────
@@ -420,6 +423,9 @@ class MBAScraper:
     # M01: curl_cffi — TLS fingerprint rotation
     # ═══════════════════════════════════════════
     async def m01_cffi(self, url: str) -> Optional[str]:
+        if cffi_requests is None:
+            print("[M01][CFFI]: curl_cffi not installed. Skipping.")
+            return None
         print("[M01][CFFI]: TLS fingerprint rotation...")
         for fp in ["chrome124", "chrome120", "chrome116", "firefox122", "edge101"]:
             try:
@@ -441,6 +447,9 @@ class MBAScraper:
     # M02: tls-client — JA3/JA4 rotation
     # ═══════════════════════════════════════════
     async def m02_tls_client(self, url: str) -> Optional[str]:
+        if tls_client_lib is None:
+            print("[M02][TLS-CLIENT]: tls-client not installed. Skipping.")
+            return None
         print("[M02][TLS-CLIENT]: JA3/JA4 fingerprint...")
         try:
             loop = asyncio.get_event_loop()
@@ -469,6 +478,9 @@ class MBAScraper:
     # M03: httpx HTTP/2
     # ═══════════════════════════════════════════
     async def m03_httpx(self, url: str) -> Optional[str]:
+        if httpx is None:
+            print("[M03][HTTPX-H2]: httpx not installed. Skipping.")
+            return None
         print("[M03][HTTPX-H2]: HTTP/2 fingerprint...")
         try:
             async with httpx.AsyncClient(http2=True, follow_redirects=True, timeout=30) as client:
@@ -487,6 +499,9 @@ class MBAScraper:
     # M04: cloudscraper
     # ═══════════════════════════════════════════
     async def m04_cloudscraper(self, url: str) -> Optional[str]:
+        if cloudscraper_lib is None:
+            print("[M04][CLOUDSCRAPER]: cloudscraper not installed. Skipping.")
+            return None
         print("[M04][CLOUDSCRAPER]: JS challenge bypass...")
         try:
             loop = asyncio.get_event_loop()
@@ -507,6 +522,9 @@ class MBAScraper:
     # M05: Manual cookies (SOL_COOKIES env)
     # ═══════════════════════════════════════════
     async def m05_manual_cookies(self, url: str) -> Optional[str]:
+        if cffi_requests is None:
+            print("[M05][COOKIES]: curl_cffi not installed. Skipping.")
+            return None
         cookie_str = self.keys["SOL_COOKIES"]
         if not cookie_str:
             return None
@@ -764,6 +782,9 @@ class MBAScraper:
     # M18: FreeProxy rotation
     # ═══════════════════════════════════════════
     async def m18_freeproxy(self, url: str) -> Optional[str]:
+        if FreeProxy is None:
+            print("[M18][FREEPROXY]: fp-proxy not installed. Skipping.")
+            return None
         print("[M18][FREEPROXY]: Free proxy rotation...")
         try:
             loop = asyncio.get_event_loop()
@@ -1052,6 +1073,9 @@ class MBAScraper:
     # M28: Patchright
     # ═══════════════════════════════════════════
     async def m28_patchright(self, url: str) -> Optional[str]:
+        if patchright_playwright is None:
+            print("[M28][PATCHRIGHT]: patchright not installed. Skipping.")
+            return None
         print("[M28][PATCHRIGHT]: Source-level CDP patch...")
         try:
             async with patchright_playwright() as p:
@@ -1089,6 +1113,9 @@ class MBAScraper:
     # M29: Nodriver
     # ═══════════════════════════════════════════
     async def m29_nodriver(self, url: str) -> Optional[str]:
+        if uc_nodriver is None:
+            print("[M29][NODRIVER]: nodriver not installed. Skipping.")
+            return None
         print("[M29][NODRIVER]: Direct CDP, no WebDriver...")
         try:
             browser = await uc_nodriver.start(
@@ -1111,6 +1138,9 @@ class MBAScraper:
     # M30: Camoufox (Firefox C++)
     # ═══════════════════════════════════════════
     async def m30_camoufox(self, url: str) -> Optional[str]:
+        if AsyncCamoufox is None:
+            print("[M30][CAMOUFOX]: camoufox not installed. Skipping.")
+            return None
         print("[M30][CAMOUFOX]: Firefox C++ fingerprint...")
         try:
             async with AsyncCamoufox(headless=True, geoip=True) as browser:
@@ -1141,6 +1171,9 @@ class MBAScraper:
     # M31: SeleniumBase UC Mode
     # ═══════════════════════════════════════════
     async def m31_seleniumbase(self, url: str) -> Optional[str]:
+        if SBDriver is None:
+            print("[M31][SELENIUMBASE-UC]: seleniumbase not installed. Skipping.")
+            return None
         print("[M31][SELENIUMBASE-UC]: 89% AWS WAF bypass rate...")
         try:
             loop = asyncio.get_event_loop()
@@ -1165,6 +1198,9 @@ class MBAScraper:
     # M32: undetected-chromedriver
     # ═══════════════════════════════════════════
     async def m32_ucd(self, url: str) -> Optional[str]:
+        if uc_chrome is None:
+            print("[M32][UCD]: undetected-chromedriver not installed. Skipping.")
+            return None
         print("[M32][UCD]: undetected-chromedriver...")
         try:
             loop = asyncio.get_event_loop()
@@ -1191,6 +1227,9 @@ class MBAScraper:
     # M33: DrissionPage
     # ═══════════════════════════════════════════
     async def m33_drissionpage(self, url: str) -> Optional[str]:
+        if ChromiumPage is None:
+            print("[M33][DRISSIONPAGE]: DrissionPage not installed. Skipping.")
+            return None
         print("[M33][DRISSIONPAGE]: Hybrid requests+browser...")
         try:
             loop = asyncio.get_event_loop()
@@ -1218,6 +1257,9 @@ class MBAScraper:
     # M34: Pydoll (CDP direct)
     # ═══════════════════════════════════════════
     async def m34_pydoll(self, url: str) -> Optional[str]:
+        if PydollChrome is None:
+            print("[M34][PYDOLL]: pydoll not installed. Skipping.")
+            return None
         print("[M34][PYDOLL]: CDP direct, no WebDriver artifacts...")
         try:
             async with PydollChrome(options={
@@ -1240,6 +1282,9 @@ class MBAScraper:
     # M35: Scrapling
     # ═══════════════════════════════════════════
     async def m35_scrapling(self, url: str) -> Optional[str]:
+        if StealthyFetcher is None:
+            print("[M35][SCRAPLING]: scrapling not installed. Skipping.")
+            return None
         print("[M35][SCRAPLING]: Adaptive stealth fetcher...")
         try:
             loop = asyncio.get_event_loop()
@@ -1263,6 +1308,9 @@ class MBAScraper:
     # M36: Botasaurus
     # ═══════════════════════════════════════════
     async def m36_botasaurus(self, url: str) -> Optional[str]:
+        if botasaurus_request is None:
+            print("[M36][BOTASAURUS]: botasaurus not installed. Skipping.")
+            return None
         print("[M36][BOTASAURUS]: Human mouse + Google referer trick...")
         try:
             loop = asyncio.get_event_loop()
@@ -1283,6 +1331,9 @@ class MBAScraper:
     # M37: Selenium Wire
     # ═══════════════════════════════════════════
     async def m37_selenium_wire(self, url: str) -> Optional[str]:
+        if swire_uc is None:
+            print("[M37][SELENIUM-WIRE]: selenium-wire not installed. Skipping.")
+            return None
         print("[M37][SELENIUM-WIRE]: Request interception + replay...")
         try:
             loop = asyncio.get_event_loop()
@@ -1368,6 +1419,9 @@ puppeteer.use(StealthPlugin());
     # M39: pychrome raw CDP
     # ═══════════════════════════════════════════
     async def m39_pychrome(self, url: str) -> Optional[str]:
+        if pychrome_lib is None:
+            print("[M39][PYCHROME]: pychrome not installed. Skipping.")
+            return None
         print("[M39][PYCHROME]: Raw CDP, no WebDriver...")
         try:
             loop = asyncio.get_event_loop()
@@ -1508,6 +1562,13 @@ puppeteer.use(StealthPlugin());
     # ═══════════════════════════════════════════
     async def fetch_cffi(self, url: str) -> Optional[str]:
         self.current_url = url
+        if cffi_requests is None:
+            # Fallback to plain requests
+            try:
+                r = requests.get(url, headers={"User-Agent": self.user_agent}, timeout=20)
+                return r.text if r.status_code == 200 else None
+            except Exception:
+                return None
         try:
             session = cffi_requests.Session(impersonate="chrome124")
             h = self._iframe_headers() if "vcs.php" in url else {"User-Agent": self.user_agent}
@@ -1534,29 +1595,74 @@ puppeteer.use(StealthPlugin());
     # CRAWLER & DISCOVERY
     # ═══════════════════════════════════════════
     async def discover_and_crawl(self, max_pages: int = 50):
-        print(f"[CRAWLER]: Discovering MBA content on {self.base_url}...")
+        """
+        Full SOL website crawler — both subdomains:
+          - sol.du.ac.in      (main portal, notices, all-notices)
+          - web.sol.du.ac.in  (subdomain, student support, schedules)
+        Follows all links with .php/.html/.pdf extensions.
+        Deduplicates URLs. Skips already visited pages.
+        """
+        SOL_DOMAINS = ("sol.du.ac.in", "web.sol.du.ac.in")
+
+        # Seed both subdomains if not already in queue
+        extra_seeds = [
+            "https://web.sol.du.ac.in/home",
+            "https://web.sol.du.ac.in/info/student-support",
+            "https://web.sol.du.ac.in/info/online-class-schedule",
+            "https://sol.du.ac.in/all-notices.php",
+            "https://sol.du.ac.in/home.php",
+        ]
+        for seed in extra_seeds:
+            if seed not in self.visited and seed not in self.discovery_queue:
+                self.discovery_queue.append(seed)
+
+        print(f"[CRAWLER]: Starting full SOL website crawl (max {max_pages} pages)...")
+        print(f"[CRAWLER]: Covering domains: {SOL_DOMAINS}")
         count = 0
+
         while self.discovery_queue and count < max_pages:
             url = self.discovery_queue.pop(0)
             if url in self.visited:
                 continue
             self.visited.add(url)
             count += 1
-            print(f"[CRAWLER][{count}/{max_pages}]: Visiting {url}")
+            print(f"[CRAWLER][{count}/{max_pages}]: {url}")
+
             html = await self.fetch_cffi(url)
             if not html:
                 continue
+
             soup = BeautifulSoup(html, "html.parser")
+
             for a in soup.find_all("a", href=True):
-                href = a["href"]
+                href = a["href"].strip()
+
+                # Skip anchors, javascript, mailto
+                if not href or href.startswith("#") or href.startswith("javascript") or href.startswith("mailto"):
+                    continue
+
+                # Resolve relative URLs — use the current page's domain as base
                 if href.startswith("/"):
-                    href = self.base_url + href
+                    from urllib.parse import urlparse
+                    parsed_base = urlparse(url)
+                    href = f"{parsed_base.scheme}://{parsed_base.netloc}{href}"
                 elif not href.startswith("http"):
                     href = self.base_url + "/" + href
-                if ("sol.du.ac.in" in href and href not in self.visited
-                        and href not in self.discovery_queue):
-                    if any(ext in href.lower() for ext in [".pdf", ".php", ".html"]) or "/" in href:
-                        self.discovery_queue.append(href)
+
+                # Only follow SOL domain links
+                if not any(domain in href for domain in SOL_DOMAINS):
+                    continue
+
+                # Avoid duplicates and already visited
+                if href in self.visited or href in self.discovery_queue:
+                    continue
+
+                # Only queue pages likely to have content
+                href_lower = href.lower()
+                if any(ext in href_lower for ext in [".php", ".html", ".pdf", "/info/", "/notice", "/student", "/mba", "/schedule"]):
+                    self.discovery_queue.append(href)
+
+            # Parse and collect MBA items
             self.current_url = url
             parsed = self._parse_html(html)
             for item in parsed:
