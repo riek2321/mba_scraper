@@ -1702,9 +1702,9 @@ puppeteer.use(StealthPlugin());
             ("M20-DoH",            lambda: self.m20_doh(url)),
             ("M21-TIMING-JITTER",  lambda: self.m21_timing_jitter(url)),
             ("M22-CURL-IMPERSONATE", lambda: self.m22_curl_impersonate(url)),
-            ("M23-SCRAPERAPI",     lambda: self.m23_scraperapi(url)),
             ("M24-SCRAPERАNT",     lambda: self.m24_scraperант(url)),
             ("M25-WSAI",           lambda: self.m25_wsai(url)),
+            ("M23-SCRAPERAPI",     lambda: self.m23_scraperapi(url)),
             ("M41-AWSALB-FORGE",   lambda: self.m41_awsalb_forge(url)),
         ]
 
