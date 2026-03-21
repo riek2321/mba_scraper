@@ -122,7 +122,7 @@ jobs:
       - name: Restore synced IDs cache
         uses: actions/cache@v4
         with:
-          path: mba_scraper/synced_ids.json
+          path: synced_ids.json
           key: synced-ids-${{ github.run_id }}
           restore-keys: |
             synced-ids-
@@ -142,20 +142,26 @@ jobs:
           echo "mode=$MODE" >> $GITHUB_OUTPUT
           echo "[WORKFLOW]: Running in mode: $MODE"
 
-      - name: Run scraper
+      - name: Find and run scraper
         run: |
-          cd mba_scraper
-          echo "[WORKFLOW]: Starting in mode: ${{ steps.mode.outputs.mode }}"
+          # Auto-detect scraper location (root or mba_scraper subfolder)
           if [ -f scraper.py ]; then
-            python scraper.py --mode ${{ steps.mode.outputs.mode }}
+            SCRAPER_DIR="."
+          elif [ -f mba_scraper/scraper.py ]; then
+            SCRAPER_DIR="mba_scraper"
           else
-            echo "[ERROR]: scraper.py not found!"
+            echo "[ERROR]: scraper.py not found in root or mba_scraper/!"
+            echo "Files in root: $(ls)"
             exit 1
           fi
+          echo "[WORKFLOW]: scraper.py found at $SCRAPER_DIR/"
+          echo "[WORKFLOW]: Mode: ${{ steps.mode.outputs.mode }}"
+          cd "$SCRAPER_DIR"
+          python scraper.py --mode ${{ steps.mode.outputs.mode }}
 
       - name: Save synced IDs cache
         if: always()
         uses: actions/cache@v4
         with:
-          path: mba_scraper/synced_ids.json
+          path: synced_ids.json
           key: synced-ids-${{ github.run_id }}
