@@ -31,7 +31,7 @@ except ImportError:
 
 try:
     from patchright.async_api import async_playwright as patchright_playwright  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     patchright_playwright = None  # type: ignore
 
 try:
@@ -46,7 +46,7 @@ except ImportError:
 
 try:
     from curl_cffi import requests as cffi_requests  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     cffi_requests = None  # type: ignore
 
 try:
@@ -61,80 +61,80 @@ except ImportError:
 
 try:
     import httpx  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     httpx = None  # type: ignore
 
 try:
     import cloudscraper as cloudscraper_lib  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     cloudscraper_lib = None  # type: ignore
 
 try:
     import tls_client as tls_client_lib  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     tls_client_lib = None  # type: ignore
 
 try:
     import nodriver as uc_nodriver  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     uc_nodriver = None  # type: ignore
 
 try:
     from camoufox.async_api import AsyncCamoufox  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     AsyncCamoufox = None  # type: ignore
 
 try:
     from seleniumbase import Driver as SBDriver  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     SBDriver = None  # type: ignore
 
 try:
     import undetected_chromedriver as uc_chrome  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     uc_chrome = None  # type: ignore
 
 try:
     from DrissionPage import ChromiumPage, ChromiumOptions  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     ChromiumPage = None  # type: ignore
     ChromiumOptions = None  # type: ignore
 
 try:
     from botasaurus.request import request as botasaurus_request, AntiDetectRequests  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     botasaurus_request = None  # type: ignore
     AntiDetectRequests = None  # type: ignore
 
 try:
     from pydoll.browser.chrome import Chrome as PydollChrome  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     PydollChrome = None  # type: ignore
 
 try:
     from scrapling import StealthyFetcher, PlayWrightFetcher  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     StealthyFetcher = None  # type: ignore
     PlayWrightFetcher = None  # type: ignore
 
 try:
     import seleniumwire.undetected_chromedriver as swire_uc  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     swire_uc = None  # type: ignore
 
 try:
     import pychrome as pychrome_lib  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     pychrome_lib = None  # type: ignore
 
 try:
     from fp.fp import FreeProxy  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     FreeProxy = None  # type: ignore
 
 try:
     import proxybroker as pb_lib  # type: ignore
-except ImportError:
+except (ImportError, OSError, Exception):
     pb_lib = None  # type: ignore
 
 
