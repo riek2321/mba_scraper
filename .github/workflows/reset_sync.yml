@@ -1,7 +1,7 @@
 name: Reset & Fresh Sync 🔄
 
 on:
-  workflow_dispatch:  # Sirf manually trigger hoga
+  workflow_dispatch:
 
 jobs:
   reset:
@@ -35,9 +35,23 @@ jobs:
             curl_cffi "httpx[http2]" cloudscraper || true
           playwright install chromium --with-deps
 
+      - name: Find scraper directory
+        id: find_dir
+        run: |
+          if [ -f scraper.py ]; then
+            echo "dir=." >> $GITHUB_OUTPUT
+          elif [ -f mba_scraper/scraper.py ]; then
+            echo "dir=mba_scraper" >> $GITHUB_OUTPUT
+          else
+            echo "[ERROR]: scraper.py not found!"
+            ls -la
+            exit 1
+          fi
+          echo "[RESET]: scraper found at $(cat $GITHUB_OUTPUT | grep dir | cut -d= -f2)/"
+
       - name: Delete all backend data
         run: |
-          cd mba_scraper
+          cd ${{ steps.find_dir.outputs.dir }}
           python3 - <<'EOF'
           import os, time, sys
           try:
@@ -63,10 +77,10 @@ jobs:
                   if not item_id:
                       continue
                   if notifier.delete_from_website(sem, item_id):
-                      print(f"  ✅ Deleted: {item.get('title','')[:50]}")
+                      print(f"  Deleted: {item.get('title','')[:60]}")
                       total += 1
                   else:
-                      print(f"  ❌ Failed:  {item.get('title','')[:50]}")
+                      print(f"  Failed:  {item.get('title','')[:60]}")
                   time.sleep(0.3)
 
           print(f"\n[RESET]: {total} items deleted from backend.")
@@ -74,23 +88,20 @@ jobs:
 
       - name: Clear synced_ids memory
         run: |
-          echo "[]" > mba_scraper/synced_ids.json
+          SCRAPER_DIR=${{ steps.find_dir.outputs.dir }}
+          echo "[]" > $SCRAPER_DIR/synced_ids.json
           echo "[RESET]: synced_ids.json cleared."
 
-      - name: Fresh scrape + sync (force mode)
+      - name: Fresh scrape + force sync
         run: |
-          cd mba_scraper
-          if [ -f scraper.py ]; then
-            python scraper.py --mode all --force
-          else
-            echo "[ERROR]: scraper.py not found"
-            exit 1
-          fi
+          cd ${{ steps.find_dir.outputs.dir }}
+          python scraper.py --mode all --force
 
       - name: Commit cleared synced_ids
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git add mba_scraper/synced_ids.json || true
-          git commit -m "reset: fresh sync [skip ci]" || true
+          SCRAPER_DIR=${{ steps.find_dir.outputs.dir }}
+          git add $SCRAPER_DIR/synced_ids.json || true
+          git commit -m "reset: fresh sync complete [skip ci]" || true
           git push || true
