@@ -2071,29 +2071,45 @@ puppeteer.use(StealthPlugin());
             "live-classes": {}
         }
         
+        def clean_subject(text):
+            if not text: return ""
+            # Strip [Date]
+            text = re.sub(r'\[.*?\]', '', text)
+            # Strip common prefixes
+            for prefix in ["MBA Sem 1:", "MBA Sem 2:", "MBA Sem 3:", "MBA Sem 4:", "MBA Live Class:", "Live Class:", "Sem 1:", "Sem 2:", "Sem 3:", "Sem 4:"]:
+                text = text.replace(prefix, "")
+            # Strip everything before the last colon (often the subject is after the colon)
+            if ":" in text:
+                text = text.split(":")[-1]
+            # Strip anything in parentheses like (2:00 PM - 3:00 PM)
+            text = re.sub(r'\(.*?\)', '', text)
+            return text.strip().lower()
+
         unique_check = set()
         for item in results:
             link = str(item.get("link", ""))
             title = str(item.get("title", ""))
             l_title = title.lower()
+            l_desc = str(item.get("description", "")).lower()
             
-            # IMPROVED: Distinguish category - items with time OR class keywords are live-classes
-            # AND: Trust existing 'type' if it's already live-classes
+            # IMPROVED: Distinguish category - broader check
             is_class = (
                 item.get("type") == "live-classes" or
                 item.get("time") or 
                 item.get("class_time") or 
-                "class schedule" in l_title or 
-                "online class" in l_title or 
-                "vcs.php" in link.lower()
+                "class" in l_title or 
+                "schedule" in l_title or 
+                "vcs.php" in link.lower() or
+                "live class" in l_desc or
+                re.search(r'\[\d{2}-\d{2}-\d{4}\]', l_title) # Dated entries are classes
             )
             category = "live-classes" if is_class else "notifications"
             semester = str(item.get("semester", "0"))
+            idate = str(item.get("date", "0"))
 
-            # DEDUPLICATION: Use link if possible, otherwise use title
-            # (Matches #pending items uniquely by title)
-            dedupe_val = link if (link and link not in ["", "#", "#pending"]) else f"T:{title}"
-            dupe_key = f"{category}|{semester}|{dedupe_val}"
+            # AGGRESSIVE DEDUPLICATION: Use cleaned subject name
+            subject_core = clean_subject(title)
+            dupe_key = f"{category}|{semester}|{idate}|{subject_core}"
             
             if dupe_key in unique_check:
                 continue
