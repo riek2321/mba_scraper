@@ -5,7 +5,7 @@ from notifier import Notifier
 from scraper import MBAScraper
 
 # --- CONFIG ---
-SCRAPER_KEY = os.environ.get("SCRAPER_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
+SCRAPER_KEY = os.environ.get("SCRAPER_KEY")
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
 
 def reset_everything():

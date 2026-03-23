@@ -10,7 +10,7 @@ async def seed():
     
     # Configuration
     API_URL = os.environ.get("BACKEND_API_URL", "https://solmates-backend.onrender.com")
-    API_KEY = os.environ.get("SCRAPER_API_KEY", "0c464de4beef5fc8c8bf52256d9b662a835247ae6e880c71a15d62bb02062601")
+    API_KEY = os.environ.get("SCRAPER_API_KEY")
     
     scraper = MBAScraper()
     db = ScraperDatabase()
