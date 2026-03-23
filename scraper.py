@@ -2073,14 +2073,27 @@ puppeteer.use(StealthPlugin());
         
         unique_check = set()
         for item in results:
-            # Distinguish category: items with time are live-classes
-            category = "live-classes" if (item.get("time") or item.get("class_time")) else "notifications"
-            semester = str(item.get("semester", "0"))
-            link = str(item.get("link", "#pending"))
+            link = str(item.get("link", ""))
+            title = str(item.get("title", ""))
+            l_title = title.lower()
             
-            # Deduplicate within this scan results
-            dupe_key = f"{category}|{semester}|{link}"
-            if link != "#pending" and dupe_key in unique_check:
+            # IMPROVED: Distinguish category - items with time OR class keywords are live-classes
+            is_class = (
+                item.get("time") or 
+                item.get("class_time") or 
+                "class schedule" in l_title or 
+                "online class" in l_title or 
+                "vcs.php" in link.lower()
+            )
+            category = "live-classes" if is_class else "notifications"
+            semester = str(item.get("semester", "0"))
+
+            # DEDUPLICATION: Use link if possible, otherwise use title
+            # (Matches #pending items uniquely by title)
+            dedupe_val = link if (link and link not in ["", "#", "#pending"]) else f"T:{title}"
+            dupe_key = f"{category}|{semester}|{dedupe_val}"
+            
+            if dupe_key in unique_check:
                 continue
             unique_check.add(dupe_key)
             
@@ -2090,14 +2103,25 @@ puppeteer.use(StealthPlugin());
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
-        for category in groups: # type: ignore
-            for semester, items in groups[category].items(): # type: ignore
+        
+        # Ensure all targeted semesters (0-4) are refreshed to purge stale data
+        # Safety check: Only proceed if we found at least 2 items (scan likely successful)
+        if len(results) < 2:
+            print("[SYNC]: Insufficient data found. Skipping sync to prevent accidental wipe.")
+            return
+
+        target_semesters = ["0", "1", "2", "3", "4"]
+        target_categories = ["notifications", "live-classes"]
+
+        for category in target_categories:
+            for semester in target_semesters:
+                items = groups[category].get(semester, []) # type: ignore
                 if notifier.bulk_sync_to_website(category, semester, items):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore
 
-        print(f"[SYNC]: Done. {stats['groups_synced']} semester groups refreshed.") # type: ignore
+        print(f"[SYNC]: Done. {stats['groups_synced']} category/semester groups refreshed.")
 
         # 3. Legacy Deletion Logic (Optional - Bulk sync handles purge automatically)
         if len(results) > 2:
