@@ -40,7 +40,7 @@ except ImportError:
     pass
 
 try:
-    import requests
+    import requests # type: ignore
 except ImportError:
     pass
 
@@ -302,7 +302,7 @@ class HumanBot:
                 elif fn == self.read:
                     await self.read(random.uniform(1, 3))
                 else:
-                    await fn()
+                    await fn() # type: ignore
             except Exception:
                 pass
             await asyncio.sleep(random.uniform(0.3, 1.5))
@@ -404,7 +404,7 @@ class MBAScraper:
             if v:
                 print(f"[OMNI][KEY]: {k} ✅ present")
 
-    def _iframe_headers(self, ua: str = None) -> dict:
+    def _iframe_headers(self, ua: Optional[str] = None) -> dict:
         return {
             "User-Agent": ua or self.user_agent,
             "Referer": self.parent_url,
@@ -429,7 +429,7 @@ class MBAScraper:
         print("[M01][CFFI]: TLS fingerprint rotation...")
         for fp in ["chrome124", "chrome120", "chrome116", "firefox122", "edge101"]:
             try:
-                session = cffi_requests.Session(impersonate=fp)
+                session = cffi_requests.Session(impersonate=fp) # type: ignore
                 session.get("https://sol.du.ac.in/home.php", timeout=12)
                 time.sleep(1)
                 session.get("https://web.sol.du.ac.in/home", timeout=12)
@@ -456,7 +456,7 @@ class MBAScraper:
             def _run():
                 for profile in ["chrome_120", "chrome_117", "firefox_120", "safari_16_0"]:
                     try:
-                        session = tls_client_lib.Session(
+                        session = tls_client_lib.Session( # type: ignore
                             client_identifier=profile,
                             random_tls_extension_order=True
                         )
@@ -469,7 +469,7 @@ class MBAScraper:
                     except Exception as e:
                         print(f"[M02][TLS-CLIENT][{profile}]: {e}")
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M02][TLS-CLIENT]: {e}")
         return None
@@ -506,14 +506,14 @@ class MBAScraper:
         try:
             loop = asyncio.get_event_loop()
             def _run():
-                scraper = cloudscraper_lib.create_scraper(
+                scraper = cloudscraper_lib.create_scraper( # type: ignore
                     browser={"browser": "chrome", "platform": "windows", "mobile": False}
                 )
                 scraper.get("https://sol.du.ac.in/home.php", timeout=12)
                 time.sleep(1)
                 r = scraper.get(url, headers=self._iframe_headers(), timeout=30)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M04][CLOUDSCRAPER]: {e}")
         return None
@@ -530,7 +530,7 @@ class MBAScraper:
             return None
         print("[M05][COOKIES]: Injected session cookies...")
         try:
-            session = cffi_requests.Session(impersonate="chrome124")
+            session = cffi_requests.Session(impersonate="chrome124") # type: ignore
             h = self._iframe_headers()
             h["Cookie"] = cookie_str
             r = session.get(url, headers=h, timeout=30)
@@ -555,7 +555,7 @@ class MBAScraper:
                 if snap:
                     return requests.get(snap, timeout=20).text
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M06][WAYBACK]: {e}")
         return None
@@ -576,7 +576,7 @@ class MBAScraper:
                         html += f'<a href="{e[2]}">{e[2]}</a> '
                     return html + "</body></html>"
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M07][CDX]: {e}")
         return None
@@ -594,7 +594,7 @@ class MBAScraper:
                     headers={"User-Agent": self.user_agent}, timeout=12
                 )
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M08][GCACHE]: {e}")
         return None
@@ -612,7 +612,7 @@ class MBAScraper:
                     headers={"User-Agent": self.user_agent}, timeout=12
                 )
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M09][BING-CACHE]: {e}")
         return None
@@ -630,7 +630,7 @@ class MBAScraper:
                     headers={"User-Agent": self.user_agent}, timeout=12
                 )
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M10][YANDEX-CACHE]: {e}")
         return None
@@ -663,11 +663,11 @@ class MBAScraper:
                             try:
                                 content = gzip.decompress(resp.content).decode("utf-8", errors="ignore")
                                 idx = content.lower().find("<html")
-                                return content[idx:] if idx >= 0 else None
+                                return content[idx:] if idx >= 0 else None # type: ignore
                             except Exception:
                                 pass
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M11][COMMONCRAWL]: {e}")
         return None
@@ -685,7 +685,7 @@ class MBAScraper:
                     headers={"User-Agent": self.user_agent}, timeout=12
                 )
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M12][CACHEDVIEW]: {e}")
         return None
@@ -702,7 +702,7 @@ class MBAScraper:
             def _run():
                 r = requests.get(self.keys["CF_WORKER"], params={"url": url}, timeout=40)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M13][CF-WORKER]: {e}")
         return None
@@ -719,7 +719,7 @@ class MBAScraper:
             def _run():
                 r = requests.get(self.keys["VERCEL"], params={"url": url}, timeout=40)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M14][VERCEL]: {e}")
         return None
@@ -736,7 +736,7 @@ class MBAScraper:
             def _run():
                 r = requests.get(self.keys["NETLIFY"], params={"url": url}, timeout=40)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M15][NETLIFY]: {e}")
         return None
@@ -752,11 +752,11 @@ class MBAScraper:
             loop = asyncio.get_event_loop()
             def _run():
                 proxies = {"http": self.keys["TOR"], "https": self.keys["TOR"]}
-                s = requests.Session()
+                s = requests.Session() # type: ignore
                 s.get("https://sol.du.ac.in/home.php", proxies=proxies, timeout=25)
                 r = s.get(url, headers=self._iframe_headers(), proxies=proxies, timeout=40)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M16][TOR]: {e}")
         return None
@@ -773,7 +773,7 @@ class MBAScraper:
                 proxies = {"http": i2p, "https": i2p}
                 r = requests.get(url, headers=self._iframe_headers(), proxies=proxies, timeout=50)
                 return r.text if r.status_code == 200 else None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M17][I2P]: {e}")
         return None
@@ -795,7 +795,7 @@ class MBAScraper:
                         if not proxy_addr:
                             continue
                         proxies = {"http": proxy_addr, "https": proxy_addr}
-                        s = requests.Session()
+                        s = requests.Session() # type: ignore
                         s.get("https://sol.du.ac.in/home.php",
                               proxies=proxies, timeout=12,
                               headers={"User-Agent": self.user_agent})
@@ -806,7 +806,7 @@ class MBAScraper:
                     except Exception:
                         continue
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M18][FREEPROXY]: {e}")
         return None
@@ -825,13 +825,13 @@ class MBAScraper:
                     return orig(host, port, socket.AF_INET6, type, proto, flags)
                 socket.getaddrinfo = ipv6_only
                 try:
-                    session = cffi_requests.Session(impersonate="chrome124")
+                    session = cffi_requests.Session(impersonate="chrome124") # type: ignore
                     session.get("https://sol.du.ac.in/home.php", timeout=12)
                     r = session.get(url, headers=self._iframe_headers(), timeout=25)
                     return r.text if r.status_code == 200 else None
                 finally:
                     socket.getaddrinfo = orig
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M19][IPv6]: {e}")
         return None
@@ -857,7 +857,7 @@ class MBAScraper:
                 def _run(resolved_ip):
                     import warnings
                     warnings.filterwarnings("ignore")
-                    session = cffi_requests.Session(impersonate="chrome124")
+                    session = cffi_requests.Session(impersonate="chrome124") # type: ignore
                     h = {**self._iframe_headers(), "Host": "web.sol.du.ac.in"}
                     target = url.replace("web.sol.du.ac.in", resolved_ip)
                     r = session.get(target, headers=h, verify=False, timeout=25)
@@ -873,7 +873,7 @@ class MBAScraper:
     async def m21_timing_jitter(self, url: str) -> Optional[str]:
         print("[M21][TIMING-JITTER]: Human-paced timing with jitter...")
         try:
-            session = cffi_requests.Session(impersonate="chrome124")
+            session = cffi_requests.Session(impersonate="chrome124") # type: ignore
             loop = asyncio.get_event_loop()
             sequence = [
                 ("https://sol.du.ac.in/home.php", random.uniform(2.5, 5.0)),
@@ -914,7 +914,7 @@ class MBAScraper:
                         "-H", f"User-Agent: {self.user_agent}",
                         "--max-time", "30", url
                     ]
-                    proc = await asyncio.create_subprocess_exec(
+                    proc = await asyncio.create_subprocess_exec( # type: ignore
                         *cmd,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
@@ -941,7 +941,7 @@ class MBAScraper:
             def _run():
                 api = f"http://api.scraperapi.com?api_key={self.keys['SCRAPER_API']}&url={url}&render_js=true"
                 return requests.get(api, timeout=60).text
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M23][SCRAPERAPI]: {e}")
         return None
@@ -958,7 +958,7 @@ class MBAScraper:
             def _run():
                 api = f"https://api.scraperant.com/v2/general?url={url}&x-api-key={self.keys['ANT']}&browser=true"
                 return requests.get(api, timeout=60).text
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M24][SCRAPERАNT]: {e}")
         return None
@@ -975,7 +975,7 @@ class MBAScraper:
             def _run():
                 api = f"https://api.webscraping.ai/html?url={url}&api_key={self.keys['WSAI']}&proxy=residential&render=true"
                 return requests.get(api, timeout=60).text
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M25][WSAI]: {e}")
         return None
@@ -1118,7 +1118,7 @@ class MBAScraper:
             return None
         print("[M29][NODRIVER]: Direct CDP, no WebDriver...")
         try:
-            browser = await uc_nodriver.start(
+            browser = await uc_nodriver.start( # type: ignore
                 headless=True,
                 browser_args=["--no-sandbox", "--disable-dev-shm-usage"]
             )
@@ -1178,7 +1178,7 @@ class MBAScraper:
         try:
             loop = asyncio.get_event_loop()
             def _run():
-                driver = SBDriver(uc=True, headless=True, no_sandbox=True)
+                driver = SBDriver(uc=True, headless=True, no_sandbox=True) # type: ignore
                 try:
                     driver.uc_open_with_reconnect("https://sol.du.ac.in/home.php", reconnect_time=3)
                     time.sleep(random.uniform(2, 4))
@@ -1187,7 +1187,7 @@ class MBAScraper:
                     return driver.get_page_source()
                 finally:
                     driver.quit()
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             print(f"[M31][SELENIUMBASE-UC]: {len(html) if html else 0} bytes")
             return html if html and self._is_valid(html) else None
         except Exception as e:
@@ -1205,10 +1205,10 @@ class MBAScraper:
         try:
             loop = asyncio.get_event_loop()
             def _run():
-                opts = uc_chrome.ChromeOptions()
+                opts = uc_chrome.ChromeOptions() # type: ignore
                 opts.add_argument("--no-sandbox")
                 opts.add_argument("--disable-dev-shm-usage")
-                driver = uc_chrome.Chrome(options=opts, headless=True)
+                driver = uc_chrome.Chrome(options=opts, headless=True) # type: ignore
                 try:
                     driver.get("https://sol.du.ac.in/home.php")
                     time.sleep(random.uniform(2, 4))
@@ -1217,7 +1217,7 @@ class MBAScraper:
                     return driver.page_source
                 finally:
                     driver.quit()
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M32][UCD]: {e}")
@@ -1238,7 +1238,7 @@ class MBAScraper:
                 opts.headless(True)
                 opts.set_argument("--no-sandbox")
                 opts.set_argument("--disable-dev-shm-usage")
-                page = ChromiumPage(opts)
+                page = ChromiumPage(opts) # type: ignore
                 try:
                     page.get("https://sol.du.ac.in/home.php")
                     time.sleep(random.uniform(2, 4))
@@ -1247,7 +1247,7 @@ class MBAScraper:
                     return page.html
                 finally:
                     page.quit()
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M33][DRISSIONPAGE]: {e}")
@@ -1298,7 +1298,7 @@ class MBAScraper:
                     except Exception:
                         continue
                 return None
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M35][SCRAPLING]: {e}")
@@ -1321,7 +1321,7 @@ class MBAScraper:
                     return request.get(parent, timeout=30).text
                 results = fetch()
                 return results[0] if results else None
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M36][BOTASAURUS]: {e}")
@@ -1339,10 +1339,10 @@ class MBAScraper:
             loop = asyncio.get_event_loop()
             parent = self.parent_url
             def _run():
-                opts = swire_uc.ChromeOptions()
+                opts = swire_uc.ChromeOptions() # type: ignore
                 opts.add_argument("--no-sandbox")
                 opts.add_argument("--disable-dev-shm-usage")
-                driver = swire_uc.Chrome(options=opts, headless=True)
+                driver = swire_uc.Chrome(options=opts, headless=True) # type: ignore
                 try:
                     driver.get("https://sol.du.ac.in/home.php")
                     time.sleep(random.uniform(2, 4))
@@ -1355,7 +1355,7 @@ class MBAScraper:
                     return driver.page_source
                 finally:
                     driver.quit()
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M37][SELENIUM-WIRE]: {e}")
@@ -1398,7 +1398,7 @@ puppeteer.use(StealthPlugin());
             script_path = "/tmp/_puppeteer_sol.js"
             with open(script_path, "w") as f:
                 f.write(script)
-            proc = await asyncio.create_subprocess_exec(
+            proc = await asyncio.create_subprocess_exec( # type: ignore
                 "node", script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
@@ -1436,7 +1436,7 @@ puppeteer.use(StealthPlugin());
                 ], stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL)
                 time.sleep(2)
                 try:
-                    browser = pychrome_lib.Browser(url="http://127.0.0.1:9223")
+                    browser = pychrome_lib.Browser(url="http://127.0.0.1:9223") # type: ignore
                     tab = browser.new_tab()
                     tab.start()
                     tab.Page.enable()
@@ -1453,7 +1453,7 @@ puppeteer.use(StealthPlugin());
                     return html
                 finally:
                     proc.terminate()
-            html = await loop.run_in_executor(None, _run)
+            html = await loop.run_in_executor(None, _run) # type: ignore
             return html if html and self._is_valid(html) else None
         except Exception as e:
             print(f"[M39][PYCHROME]: {e}")
@@ -1482,7 +1482,7 @@ puppeteer.use(StealthPlugin());
                 h["Cookie"] = cookie_str
                 if csrf:
                     h["X-CSRF-Token"] = csrf
-                session = cffi_requests.Session(impersonate="chrome124")
+                session = cffi_requests.Session(impersonate="chrome124") # type: ignore
                 r = session.get(url, headers=h, timeout=30)
                 print(f"[M40][CSRF-COOKIES]: {r.status_code}")
                 if r.status_code == 200:
@@ -1505,7 +1505,7 @@ puppeteer.use(StealthPlugin());
                     "https://web.sol.du.ac.in/info/about",
                 ]:
                     try:
-                        session = cffi_requests.Session(impersonate="chrome124")
+                        session = cffi_requests.Session(impersonate="chrome124") # type: ignore
                         session.get(probe, headers={"User-Agent": self.user_agent}, timeout=12)
                         if session.cookies.get("AWSALB"):
                             print(f"[M41][AWSALB-FORGE]: Got AWSALB from {probe}")
@@ -1515,7 +1515,7 @@ puppeteer.use(StealthPlugin());
                     except Exception:
                         continue
                 return None
-            return await loop.run_in_executor(None, _run)
+            return await loop.run_in_executor(None, _run) # type: ignore
         except Exception as e:
             print(f"[M41][AWSALB-FORGE]: {e}")
         return None
@@ -1570,7 +1570,7 @@ puppeteer.use(StealthPlugin());
             except Exception:
                 return None
         try:
-            session = cffi_requests.Session(impersonate="chrome124")
+            session = cffi_requests.Session(impersonate="chrome124") # type: ignore
             h = self._iframe_headers() if "vcs.php" in url else {"User-Agent": self.user_agent}
             r = session.get(url, headers=h, timeout=30)
             return r.text if r.status_code == 200 else None
@@ -1625,7 +1625,7 @@ puppeteer.use(StealthPlugin());
             if url in self.visited:
                 continue
             self.visited.add(url)
-            count += 1
+            count += 1 # type: ignore
             print(f"[CRAWLER][{count}/{max_pages}]: {url}")
 
             html = await self.fetch_cffi(url)
@@ -1812,7 +1812,7 @@ puppeteer.use(StealthPlugin());
                     if txt:
                         abs_link = urljoin(self.current_url, a["href"])
                         results.append({
-                            "title": ("MBA Update: " + re.sub(r'^\[.*?\]\s*', '', txt).strip())[:100],
+                            "title": ("MBA Update: " + re.sub(r'^\[.*?\]\s*', '', txt).strip())[:100], # type: ignore
                             "link": abs_link,
                             "semester": self.extract_semester_logic(txt),
                             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -1863,7 +1863,7 @@ puppeteer.use(StealthPlugin());
                 )
                 abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending"
                 results.append({
-                    "title": f"[{current_date}] Sem {semester}: {subj}"[:100],
+                    "title": f"[{current_date}] Sem {semester}: {subj}"[:100], # type: ignore
                     "link": abs_link, "semester": semester,
                     "date": self.parse_date(current_date),
                     "class_time": time_txt,
@@ -1880,7 +1880,7 @@ puppeteer.use(StealthPlugin());
                     seen.add(abs_link)
                     clean = re.sub(r"^\[.*?\]\s*", "", txt).strip()
                     results.append({
-                        "title": f"MBA Update: {clean}"[:100],
+                        "title": f"MBA Update: {clean}"[:100], # type: ignore
                         "link": abs_link,
                         "semester": self.extract_semester_logic(txt),
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -2101,7 +2101,7 @@ puppeteer.use(StealthPlugin());
                         (sem != "0" and item_date.date() < now.date())
                     )
                     if to_delete and notifier.delete_from_website(sem, item_id):
-                        deleted += 1
+                        deleted += 1 # type: ignore
                 except Exception:
                     continue
             if deleted:
@@ -2121,7 +2121,7 @@ if __name__ == "__main__":
             idx = sys.argv.index("--mode")
             if idx + 1 < len(sys.argv):
                 mode = sys.argv[idx + 1]
-        force = "--force" in sys.argv
+        force = "--force" in sys.argv or os.environ.get("FORCE_SYNC", "").lower() == "true"
 
         scraper = MBAScraper(target_mode=mode, force_sync=force)
         results = await scraper.run(mode=mode)

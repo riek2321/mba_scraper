@@ -32,7 +32,7 @@ class Notifier:
         import time
         for i in range(max_retries):
             try:
-                response = requests.request(method, url, timeout=30, **kwargs)
+                response = requests.request(method, url, timeout=30, **kwargs) # type: ignore
                 # Success cases: 200/201 (Created), 204 (No Content), 404 (Not Found/Deleted), 409 (Conflict/Exists)
                 if response.status_code in [200, 201, 204, 404, 409]:
                     return response

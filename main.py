@@ -43,7 +43,7 @@ async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: st
     """
     # PRODUCTION UNIFIED CONFIGURATION
     API_URL: str = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
-    API_KEY: str = os.environ.get("SCRAPER_KEY")
+    API_KEY: str = os.environ.get("SCRAPER_KEY", "")
     
     scraper = MBAScraper(target_mode=mode)
     db = ScraperDatabase()

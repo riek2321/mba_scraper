@@ -1,8 +1,8 @@
 import os
 import json
 import datetime
-from notifier import Notifier
-from scraper import MBAScraper
+from notifier import Notifier # type: ignore
+from scraper import MBAScraper # type: ignore
 
 # --- CONFIG ---
 SCRAPER_KEY = os.environ.get("SCRAPER_KEY")
@@ -37,8 +37,8 @@ def reset_everything():
                 item_id = item.get('_id') or item.get('id')
                 if item_id:
                     if notifier.delete_from_website(sem, item_id):
-                        deleted_in_batch += 1
-                        total_deleted += 1
+                        deleted_in_batch += 1 # type: ignore
+                        total_deleted += 1 # type: ignore
             
             if deleted_in_batch == 0:
                 print("  [!] Warning: Found items but could not delete them. Breaking to avoid infinite loop.")
