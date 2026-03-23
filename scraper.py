@@ -2099,7 +2099,9 @@ puppeteer.use(StealthPlugin());
                 for b_item in backend_items:
                     b_link = b_item.get("link")
                     b_id = b_item.get("_id") or b_item.get("id")
-                    if b_link and b_link != "#pending" and b_link not in scrape_links:
+                    # ✅ SAFETY: Only delete if link is missing AND it's a ROOT item (no folderId)
+                    # This prevents deleting Recorded Classes that have been moved to folders.
+                    if b_link and b_link != "#pending" and not b_item.get("folderId") and b_link not in scrape_links:
                         # Extra check: Only delete if date is still current/future
                         # (Past dates are handled by cleanup_old_data anyway)
                         print(f"  [SYNC-DELETE]: Item removed from SOL -> {b_item.get('title')[:50]}")
@@ -2129,7 +2131,9 @@ puppeteer.use(StealthPlugin());
                     item_date = datetime.datetime.strptime(
                         item.get("date", ""), "%Y-%m-%d"
                     )
-                    to_delete = (
+                    # ✅ SAFETY: Never auto-delete items inside folders (Recorded Classes)
+                    is_in_folder = bool(item.get("folderId"))
+                    to_delete = not is_in_folder and (
                         (sem == "0" and item_date < thirty_ago) or
                         (sem != "0" and item_date.date() < now.date())
                     )
