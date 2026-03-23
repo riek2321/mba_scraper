@@ -2058,38 +2058,23 @@ puppeteer.use(StealthPlugin());
     # SYNC & CLEANUP
     # ═══════════════════════════════════════════
     def sync_results(self: Any, results: list, notifier: Any, memory_file: str):
-        synced: Set[str] = set()
-        if os.path.exists(memory_file):
-            try:
-                content = open(memory_file).read().strip()
-                if content:
-                    synced = set(json.loads(content))
-            except Exception:
-                pass
-        stats = {"new": 0, "skipped": 0, "deleted": 0}
+        # 🚀 STRATEGY UPDATE: Scraper is now stateless. 
+        # It sends everything it finds to the backend, and the backend handles 
+        # deduplication and intelligence (Coming Soon -> Real Link upgrades).
+        stats = {"new_or_updated": 0, "skipped": 0, "deleted": 0}
+        
+        print(f"[SYNC]: Syncing {len(results)} items to backend...")
 
-        # 1. Sync New Items
+        # 1. Sync All Items found in this run
         for item in results:
-            sem = item.get("semester", "0")
-            title = item.get("title", "")
-            dt = item.get("date", "")
-            tm = item.get("class_time", "")
-            # ✅ FIX: Include link in hash so that if a "Coming Soon" (#pending) 
-            # becomes a real URL, the hash changes and we trigger a sync update.
-            link = item.get("link", "")
-            h = base64.b64encode(f"{sem}:{title}:{dt}:{tm}:{link}".encode()).decode()
-            if h in synced and not self.force_sync:
-                stats["skipped"] += 1
-                continue
             print(f"[SYNC]: {item['title'][:60]}")
             if notifier.sync_to_website(item):
-                synced.add(h)
-                stats["new"] += 1
+                stats["new_or_updated"] += 1
                 print(f"  [✅ OK]")
             else:
                 stats["skipped"] += 1
-                print(f"  [❌ FAILED]")
-            time.sleep(1.0) # Rate limit
+                print(f"  [❌ SKIPPED/EXISTING]")
+            time.sleep(0.5) # Reduced rate limit - backend is fast now!
 
         # 2. Sync Deletions (If item is no longer on SOL site, delete from backend)
         # Safety: Only if we have enough results to trust the scrape
@@ -2113,9 +2098,7 @@ puppeteer.use(StealthPlugin());
                             # Remove from local synced_ids too
                             # (But we don't have the hash here, so we'll just let it re-add if it ever reappears)
 
-        print(f"[SYNC]: New={stats['new']} Deleted={stats['deleted']} Skipped={stats['skipped']}")
-        with open(memory_file, "w") as f:
-            json.dump(list(synced), f)
+        print(f"[SYNC]: Sync={stats['new_or_updated']} Deleted={stats['deleted']} Skipped={stats['skipped']}")
 
     def cleanup_old_data(self: Any, notifier: Any):
         print("[CLEANUP]: Auto-cleanup old records...")
