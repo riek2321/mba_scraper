@@ -2089,7 +2089,7 @@ puppeteer.use(StealthPlugin());
             groups[category][semester].append(item)
 
         # 2. Perform Bulk Syncs
-        stats = {"groups_synced": 0, "failed": 0}
+        stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
         for category in groups: # type: ignore
             for semester, items in groups[category].items(): # type: ignore
                 if notifier.bulk_sync_to_website(category, semester, items):
@@ -2116,11 +2116,11 @@ puppeteer.use(StealthPlugin());
                         # (Past dates are handled by cleanup_old_data anyway)
                         print(f"  [SYNC-DELETE]: Item removed from SOL -> {b_item.get('title')[:50]}")
                         if notifier.delete_from_website(sem, b_id):
-                            stats["deleted"] += 1 # pyre-ignore[16]
+                            stats["deleted"] += 1 # type: ignore
                             # Remove from local synced_ids too
                             # (But we don't have the hash here, so we'll just let it re-add if it ever reappears)
 
-        print(f"[SYNC]: Sync={stats['new_or_updated']} Deleted={stats['deleted']} Skipped={stats['skipped']}")
+        print(f"[SYNC]: GroupsSynced={stats['groups_synced']} Deleted={stats['deleted']} Failed={stats['failed']}") # type: ignore
 
     def cleanup_old_data(self: Any, notifier: Any):
         print("[CLEANUP]: Auto-cleanup old records...")
