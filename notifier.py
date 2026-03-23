@@ -65,6 +65,21 @@ class Notifier:
             print(f"  [API]: POST {url} | Result: FAILED (No response from backend)")
             return False
 
+    def bulk_sync_to_website(self, category, semester, items):
+        """Bulk Sync: Replaces an entire semester's data in one transaction."""
+        url = f"{self.website_api_url}/api/sol/sync/{category}/{semester}"
+        headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
+        
+        print(f"  [API]: BULK SYNC {category} Sem {semester} ({len(items)} items)...")
+        resp = self._request_with_retry("POST", url, json=items, headers=headers)
+        
+        if resp and resp.status_code == 200:
+            print(f"  [✅ OK]: Bulk sync successful for {category} Sem {semester}.")
+            return True
+        else:
+            print(f"  [❌ FAILED]: Bulk sync failed (Status: {resp.status_code if resp else 'No Response'})")
+            return False
+
     def update_on_website(self, semester, item_id, notice_data):
         url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"
         payload = {

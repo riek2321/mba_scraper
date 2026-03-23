@@ -2058,26 +2058,48 @@ puppeteer.use(StealthPlugin());
     # SYNC & CLEANUP
     # ═══════════════════════════════════════════
     def sync_results(self: Any, results: list, notifier: Any, memory_file: str):
-        # 🚀 STRATEGY UPDATE: Scraper is now stateless. 
-        # It sends everything it finds to the backend, and the backend handles 
-        # deduplication and intelligence (Coming Soon -> Real Link upgrades).
-        stats = {"new_or_updated": 0, "skipped": 0, "deleted": 0}
+        # 🚀 STRATEGY UPDATE: Scraper now uses Bulk Sync (Auto-Purge Mode).
+        # It groups items by category and semester, then replaces the entire 
+        # semester's data on the backend in one transaction. 
+        # This ensures zero accumulation of outdated/duplicate items.
         
-        print(f"[SYNC]: Syncing {len(results)} items to backend...")
+        print(f"[SYNC]: Syncing {len(results)} items to backend via Bulk Sync...")
 
-        # 1. Sync All Items found in this run
+        # 1. Group by Category and Semester
+        groups = {
+            "notifications": {},
+            "live-classes": {}
+        }
+        
+        unique_check = set()
         for item in results:
-            print(f"[SYNC]: {item['title'][:60]}")
-            if notifier.sync_to_website(item):
-                stats["new_or_updated"] += 1
-                print(f"  [✅ OK]")
-            else:
-                stats["skipped"] += 1
-                print(f"  [❌ SKIPPED/EXISTING]")
-            time.sleep(0.5) # Reduced rate limit - backend is fast now!
+            # Distinguish category: items with time are live-classes
+            category = "live-classes" if (item.get("time") or item.get("class_time")) else "notifications"
+            semester = str(item.get("semester", "0"))
+            link = str(item.get("link", "#pending"))
+            
+            # Deduplicate within this scan results
+            dupe_key = f"{category}|{semester}|{link}"
+            if link != "#pending" and dupe_key in unique_check:
+                continue
+            unique_check.add(dupe_key)
+            
+            if semester not in groups[category]:
+                groups[category][semester] = []
+            groups[category][semester].append(item)
 
-        # 2. Sync Deletions (If item is no longer on SOL site, delete from backend)
-        # Safety: Only if we have enough results to trust the scrape
+        # 2. Perform Bulk Syncs
+        stats = {"groups_synced": 0, "failed": 0}
+        for category in groups: # type: ignore
+            for semester, items in groups[category].items(): # type: ignore
+                if notifier.bulk_sync_to_website(category, semester, items):
+                    stats["groups_synced"] += 1 # type: ignore
+                else:
+                    stats["failed"] += 1 # type: ignore
+
+        print(f"[SYNC]: Done. {stats['groups_synced']} semester groups refreshed.") # type: ignore
+
+        # 3. Legacy Deletion Logic (Optional - Bulk sync handles purge automatically)
         if len(results) > 2:
             print("[SYNC]: Checking for deletions (Items removed from SOL)...")
             scrape_links = {r["link"] for r in results if r.get("link") and r["link"] != "#pending"}
