@@ -90,3 +90,15 @@ class Notifier:
             except Exception:
                 return []
         return []
+
+    def clear_blacklist(self):
+        """Clears the backend's notification blacklist (sol_deleted_notifications)"""
+        url = f"{self.website_api_url}/api/sol/debug/clear-blacklist"
+        headers = {"x-scraper-key": self.scraper_key, "Content-Type": "application/json"}
+        resp = self._request_with_retry("POST", url, headers=headers)
+        if resp and resp.status_code == 200:
+            print("[RESET]: Successfully cleared backend notification blacklist.")
+            return True
+        else:
+            print(f"[RESET]: Failed to clear blacklist (Status: {resp.status_code if resp else 'No Response'})")
+            return False

@@ -18,6 +18,9 @@ def reset_everything():
         with open(memory_file, 'w') as f:
             f.write("[]")
         print(f"[RESET]: Cleared local memory file '{memory_file}'")
+    
+    # 2. Clear backend blacklist
+    notifier.clear_blacklist()
 
     # 2. Delete all backend items for all semesters
     semesters = ["0", "1", "2", "3", "4"]
