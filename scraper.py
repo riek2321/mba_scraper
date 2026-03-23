@@ -2074,7 +2074,10 @@ puppeteer.use(StealthPlugin());
             title = item.get("title", "")
             dt = item.get("date", "")
             tm = item.get("class_time", "")
-            h = base64.b64encode(f"{sem}:{title}:{dt}:{tm}".encode()).decode()
+            # ✅ FIX: Include link in hash so that if a "Coming Soon" (#pending) 
+            # becomes a real URL, the hash changes and we trigger a sync update.
+            link = item.get("link", "")
+            h = base64.b64encode(f"{sem}:{title}:{dt}:{tm}:{link}".encode()).decode()
             if h in synced and not self.force_sync:
                 stats["skipped"] += 1
                 continue
