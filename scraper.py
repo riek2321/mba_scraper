@@ -2078,7 +2078,9 @@ puppeteer.use(StealthPlugin());
             l_title = title.lower()
             
             # IMPROVED: Distinguish category - items with time OR class keywords are live-classes
+            # AND: Trust existing 'type' if it's already live-classes
             is_class = (
+                item.get("type") == "live-classes" or
                 item.get("time") or 
                 item.get("class_time") or 
                 "class schedule" in l_title or 
