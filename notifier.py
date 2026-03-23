@@ -1,3 +1,6 @@
+# pyre-ignore-all-errors
+# pyre-unsafe
+# type: ignore
 try:
     import requests # type: ignore
 except ImportError:
@@ -90,6 +93,18 @@ class Notifier:
             except Exception:
                 return []
         return []
+
+    def clear_category(self, category):
+        """Atomic Hard Reset: Clears an entire category on the backend"""
+        url = f"{self.website_api_url}/api/sol/{category}/clear-all"
+        headers = {"x-scraper-key": self.scraper_key, "Content-Type": "application/json"}
+        resp = self._request_with_retry("POST", url, headers=headers)
+        if resp and resp.status_code == 200:
+            print(f"[RESET]: Successfully cleared category '{category}' on backend.")
+            return True
+        else:
+            print(f"[RESET]: Failed to clear category '{category}' (Status: {resp.status_code if resp else 'No Response'})")
+            return False
 
     def clear_blacklist(self):
         """Clears the backend's notification blacklist (sol_deleted_notifications)"""

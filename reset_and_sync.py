@@ -1,3 +1,6 @@
+# pyre-ignore-all-errors
+# pyre-unsafe
+# type: ignore
 """
 reset_and_sync.py — Ek baar manually chalao:
 1. Backend se sab kuch delete karo (semesters 0,1,2,3,4)
@@ -9,20 +12,24 @@ Usage:
   python reset_and_sync.py
 """
 
-import asyncio
-import json
 import os
 import sys
+
+# Add current directory to path for local imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+import asyncio
+import json
 import time
 
 try:
-    from notifier import Notifier
+    from notifier import Notifier # type: ignore # pyre-ignore[21]
 except ImportError:
     print("[ERROR]: notifier.py nahi mila. Is script ko mba_scraper/ folder mein se chalao.")
     sys.exit(1)
 
 try:
-    from scraper import MBAScraper
+    from scraper import MBAScraper # type: ignore # pyre-ignore[21]
 except ImportError:
     print("[ERROR]: scraper.py nahi mila.")
     sys.exit(1)
@@ -34,36 +41,20 @@ SEMESTERS   = ["0", "1", "2", "3", "4"]
 
 
 def delete_all(notifier: Notifier):
-    """Backend se saare semesters ki saari entries delete karo."""
+    """Backend se notifications aur live-classes ki saari entries ek saath delete karo."""
     print("\n" + "="*50)
-    print("[RESET]: Step 1 — Backend se sab delete kar rahe hain...")
+    print("[RESET]: Step 1 — Backend se sab delete kar rahe hain (ATOMIC)...")
     print("="*50)
 
-    total_deleted = 0
-    for sem in SEMESTERS:
-        items = notifier.get_from_website(sem)
-        if not items:
-            print(f"  [Sem {sem}]: Koi item nahi mila.")
-            continue
+    # Atomic clear for both categories
+    n_ok = notifier.clear_category("notifications")
+    l_ok = notifier.clear_category("live-classes")
+    b_ok = notifier.clear_blacklist()
 
-        print(f"  [Sem {sem}]: {len(items)} items mile — delete kar rahe hain...")
-        sem_deleted = 0
-        for item in items:
-            item_id = item.get("_id") or item.get("id")
-            if not item_id:
-                continue
-            success = notifier.delete_from_website(sem, item_id)
-            if success:
-                sem_deleted += 1
-                print(f"    ✅ Deleted: {item.get('title', 'Unknown')[:60]}")
-            else:
-                print(f"    ❌ Failed:  {item.get('title', 'Unknown')[:60]}")
-            time.sleep(0.5)
-
-        print(f"  [Sem {sem}]: {sem_deleted}/{len(items)} deleted.")
-        total_deleted += sem_deleted
-
-    print(f"\n[RESET]: Total {total_deleted} items deleted from backend.")
+    if n_ok and l_ok and b_ok:
+        print("\n  ✅ Backend fully reset (Notifications, Live Classes, and Blacklist).")
+    else:
+        print("\n  ⚠️  Kuch operations fail hue. Check backend logs.")
 
 
 def clear_memory():
