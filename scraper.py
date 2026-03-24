@@ -1977,7 +1977,7 @@ puppeteer.use(StealthPlugin());
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
                 results.append({
-                    "title": f"[{current_date}] MBA Sem {semester}: {subj} ({time_txt})",
+                    "title": f"[{current_date}] {subj} ({time_txt})",
                     "link": href, "semester": semester,
                     "date": parsed_date,
                     "class_time": time_txt,
@@ -2164,16 +2164,16 @@ puppeteer.use(StealthPlugin());
             # 2. sol_notifications (Original Semester) for the news feed
             
             if category == "live-classes":
-                # Entry for Classes (Sem 0)
+                # Entry for Classes PORTAL (Category: live-classes, Semester: 0)
                 if "0" not in groups["live-classes"]:
                     groups["live-classes"]["0"] = []
-                # Use Semester 0 for the Classes bucket
-                class_item = item.copy()
-                groups["live-classes"]["0"].append(class_item)
+                groups["live-classes"]["0"].append(item.copy())
                 
-                # Entry for Notifications (Original Semester)
+                # Entry for NOTIFICATION FEED (Category: notifications, Semester: Real)
                 if semester not in groups["notifications"]:
                     groups["notifications"][semester] = []
+                # IMPORTANT: If semester is "0", it's a generic notice. 
+                # If it's a real class, it should be in 1-4.
                 groups["notifications"][semester].append(item)
             else:
                 # Regular Notification (keeps original semester)
