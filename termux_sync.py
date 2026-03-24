@@ -35,10 +35,14 @@ def run_sync():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         os.chdir(script_dir)
         
-        # Dynamically load the main module from the subdirectory
-        main_path = os.path.join(script_dir, 'mba_scraper', 'main.py')
+        # Dynamically load the main module
+        # Check both current dir and subdirectory
+        main_path = os.path.join(script_dir, 'main.py')
         if not os.path.exists(main_path):
-            logger.error(f"Scraper core not found at {main_path}")
+            main_path = os.path.join(script_dir, 'mba_scraper', 'main.py')
+            
+        if not os.path.exists(main_path):
+            logger.error(f"Scraper core (main.py) not found at {main_path} or {os.path.join(script_dir, 'main.py')}")
             return
 
         spec = importlib.util.spec_from_file_location("mba_main", main_path)
