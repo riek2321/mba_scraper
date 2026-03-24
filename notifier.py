@@ -121,6 +121,30 @@ class Notifier:
             print(f"[RESET]: Failed to clear category '{category}' (Status: {resp.status_code if resp else 'No Response'})")
             return False
 
+    def sync_bulk_to_website(self, semester, items):
+        """
+        🚀 BULK SYNC: Sends a full list of current notices for a semester.
+        The backend handles Adds, Updates (links), and Deletions.
+        """
+        url = f"{self.website_api_url}/api/sol/sync-bulk/{semester}"
+        payload = {"items": items}
+        headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
+        
+        print(f"[API][BULK]: Syncing {len(items)} items for Semester {semester}...")
+        resp = self._request_with_retry("POST", url, json=payload, headers=headers)
+        
+        if resp is not None:
+            try:
+                stats = resp.json().get('stats', {})
+                print(f"  [API][BULK]: Success | Added: {stats.get('added',0)}, Updated: {stats.get('updated',0)}, Deleted: {stats.get('deleted',0)}")
+                return True
+            except Exception:
+                print(f"  [API][BULK]: Success (Status: {resp.status_code})")
+                return True
+        else:
+            print(f"  [API][BULK]: FAILED (No response)")
+            return False
+
     def clear_blacklist(self):
         """Clears the backend's notification blacklist (sol_deleted_notifications)"""
         url = f"{self.website_api_url}/api/sol/debug/clear-blacklist"
