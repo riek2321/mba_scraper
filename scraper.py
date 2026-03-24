@@ -2049,7 +2049,7 @@ puppeteer.use(StealthPlugin());
         if mode == "all":
             print("[OMNI]: COMPREHENSIVE scan (Classes + Notices + Discovery)")
             self.notices.extend(await self.run_class_chain())
-            await self.discover_and_crawl(max_pages=500)
+            await self.discover_and_crawl(max_pages=1000)
             print(f"[SUMMARY]: Total MBA items: {len(self.notices)}")
 
         elif mode == "website":
