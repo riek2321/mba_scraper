@@ -60,7 +60,9 @@ async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: st
                     
         print(f"[JOB]: Finished Scraper Job.")
     except Exception as e:
+        import traceback
         print(f"[ERROR]: Job failed: {e}")
+        print(traceback.format_exc())
 
 def keep_alive():
     """Self-ping to prevent Render sleep (Free Tier)"""
