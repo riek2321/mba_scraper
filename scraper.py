@@ -2175,7 +2175,7 @@ puppeteer.use(StealthPlugin());
             return
 
         target_semesters = ["0", "1", "2", "3", "4"]
-        target_categories = ["notifications", "live-classes"]
+        target_categories = ["notifications"]
 
         for category in target_categories:
             for semester in target_semesters:
