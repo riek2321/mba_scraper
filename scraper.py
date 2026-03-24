@@ -2128,19 +2128,23 @@ puppeteer.use(StealthPlugin());
             else:
                 category = "live-classes" if is_class else "notifications"
             semester = str(item.get("semester", "0"))
+            
+            # REQUIREMENT: Force Live Classes to Semester 0 to keep archives clean.
+            # Notifications will keep their original semester.
+            sync_semester = "0" if category == "live-classes" else semester
             idate = str(item.get("date", "0"))
 
             # AGGRESSIVE DEDUPLICATION: Use cleaned subject name
             subject_core = clean_subject(title)
-            dupe_key = f"{category}|{semester}|{idate}|{subject_core}"
+            dupe_key = f"{category}|{sync_semester}|{idate}|{subject_core}"
             
             if dupe_key in unique_check:
                 continue
             unique_check.add(dupe_key)
             
-            if semester not in groups[category]:
-                groups[category][semester] = []
-            groups[category][semester].append(item)
+            if sync_semester not in groups[category]:
+                groups[category][sync_semester] = []
+            groups[category][sync_semester].append(item)
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
