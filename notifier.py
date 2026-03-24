@@ -65,13 +65,18 @@ class Notifier:
             print(f"  [API]: POST {url} | Result: FAILED (No response from backend)")
             return False
 
-    def bulk_sync_to_website(self, category, semester, items):
+    def bulk_sync_to_website(self, category, semester, items, allow_deletions=True):
         """Bulk Sync: Replaces an entire semester's data in one transaction."""
-        url = f"{self.website_api_url}/api/sol/sync/{category}/{semester}"
+        sync_url = f"{self.website_api_url}/api/sol/sync-bulk/{category}/{semester}"
+        
+        # Add deletion flag to URL
+        if not allow_deletions:
+            sync_url += "?allowDeletions=false"
+            
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         
-        print(f"  [API]: BULK SYNC {category} Sem {semester} ({len(items)} items)...")
-        resp = self._request_with_retry("POST", url, json=items, headers=headers)
+        print(f"  [API]: BULK SYNC {category} Sem {semester} ({len(items)} items) | Deletions: {allow_deletions}")
+        resp = self._request_with_retry("POST", sync_url, json=items, headers=headers)
         
         if resp and resp.status_code == 200:
             print(f"  [✅ OK]: Bulk sync successful for {category} Sem {semester}.")

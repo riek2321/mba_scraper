@@ -2062,13 +2062,13 @@ puppeteer.use(StealthPlugin());
     # ═══════════════════════════════════════════
     # SYNC & CLEANUP
     # ═══════════════════════════════════════════
-    def sync_results(self: Any, results: list, notifier: Any, memory_file: str):
+    def sync_results(self: Any, results: list, notifier: Any, memory_file: str, allow_deletions: bool = True):
         # 🚀 STRATEGY UPDATE: Scraper now uses Bulk Sync (Auto-Purge Mode).
         # It groups items by category and semester, then replaces the entire 
         # semester's data on the backend in one transaction. 
         # This ensures zero accumulation of outdated/duplicate items.
         
-        print(f"[SYNC]: Syncing {len(results)} items to backend via Bulk Sync...")
+        print(f"[SYNC]: Syncing {len(results)} items to backend via Bulk Sync... | Deletions: {allow_deletions}")
 
         # 1. Group by Category and Semester
         groups = {
@@ -2139,7 +2139,7 @@ puppeteer.use(StealthPlugin());
         for category in target_categories:
             for semester in target_semesters:
                 items = groups[category].get(semester, []) # type: ignore
-                if notifier.sync_bulk_to_website(category, semester, items):
+                if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=allow_deletions):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore

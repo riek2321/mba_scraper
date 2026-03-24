@@ -37,7 +37,7 @@ def run_health_server():
     print(f"[HEALTH]: Started on port {port}")
     server.serve_forever()
 
-async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: str = "all"):
+async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: str = "all", allow_deletions: bool = True):
     """
     Main job function that runs the scraper and syncs with the backend.
     """
@@ -49,14 +49,14 @@ async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: st
     db = ScraperDatabase()
     notifier = Notifier(api_url=API_URL, scraper_key=API_KEY)
     
-    print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [JOB]: Starting MBA Scraper | Mode: {mode}")
+    print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [JOB]: Starting MBA Scraper | Mode: {mode} | Deletions: {allow_deletions}")
     try:
         results: List[Dict[str, Any]] = await scraper.run(days_back=days_back, mode=mode, targets=targets)
         results = results if results is not None else []
         print(f"[JOB]: Found {len(results)} possible MBA items.")
         
         # Sync logic (BULK SYNC) - Optimized for accuracy and deletions
-        scraper.sync_results(results, notifier, "synced_ids.json")
+        scraper.sync_results(results, notifier, "synced_ids.json", allow_deletions=allow_deletions)
                     
         print(f"[JOB]: Finished Scraper Job.")
     except Exception as e:
@@ -109,6 +109,27 @@ async def main():
         except Exception as e:
             print(f"[MAIN][ERROR]: Loop error: {e}")
             await asyncio.sleep(60)
+
+def main_job(mode="all", allow_deletions: bool = True):
+    """
+    Synchronous wrapper for the job function, easily callable from external scripts.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    if loop.is_running():
+        # If we are already in an event loop (rare but possible)
+        try:
+            import nest_asyncio # type: ignore
+            nest_asyncio.apply()
+            loop.create_task(job(mode=mode, allow_deletions=allow_deletions))
+        except ImportError:
+            print("[WARN]: nest_asyncio not found. Task might not run correctly inside existing loop.")
+    else:
+        loop.run_until_complete(job(mode=mode, allow_deletions=allow_deletions))
 
 if __name__ == "__main__":
     asyncio.run(main())
