@@ -35,7 +35,9 @@ class Notifier:
         import time
         for i in range(max_retries):
             try:
-                response = requests.request(method, url, timeout=30, **kwargs) # type: ignore
+                # Optimized timeout for Bulk Sync operations
+                current_timeout = kwargs.pop('timeout', 60)
+                response = requests.request(method, url, timeout=current_timeout, **kwargs) # type: ignore
                 # Success cases: 200/201 (Created), 204 (No Content), 404 (Not Found/Deleted), 409 (Conflict/Exists)
                 if response.status_code in [200, 201, 204, 404, 409]:
                     return response
@@ -76,7 +78,8 @@ class Notifier:
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         
         print(f"  [API]: BULK SYNC {category} Sem {semester} ({len(items)} items) | Deletions: {allow_deletions}")
-        resp = self._request_with_retry("POST", sync_url, json=items, headers=headers)
+        payload = {"items": items}
+        resp = self._request_with_retry("POST", sync_url, json=payload, headers=headers)
         
         if resp and resp.status_code == 200:
             print(f"  [✅ OK]: Bulk sync successful for {category} Sem {semester}.")
