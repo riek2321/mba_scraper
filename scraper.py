@@ -2017,9 +2017,12 @@ puppeteer.use(StealthPlugin());
         if "4TH" in t or "FOURTH" in t:
             return "4"
         roman = {"I": "1", "II": "2", "III": "3", "IV": "4"}
-        m = re.search(r"(?:SEM(?:ESTER)?|YEAR|YR|PART)\s*(IV|III|II|I|[1-4])\b", t)
+        m = re.search(r"(?:SEM(?:ESTER)?|YEAR|YR|PART|TERM)\s*(IV|III|II|I|[1-4])\b", t)
         if m:
             return roman.get(m.group(1), m.group(1))
+        m = re.search(r"([1-4])(?:ST|ND|RD|TH)?\s*(?:SEM(?:ESTER)?|YEAR|YR|PART|TERM)", t)
+        if m:
+            return m.group(1)
         m = re.search(r"\b([1-4])(?:ST|ND|RD|TH)\b", t)
         if m:
             return m.group(1)
@@ -2146,6 +2149,10 @@ puppeteer.use(StealthPlugin());
             else:
                 category = "live-classes" if is_class else "notifications"
             semester = str(item.get("semester", "0"))
+            # HEALER: If semester is "0", try to find it in the title
+            if semester == "0" and title:
+                semester = self.extract_semester_logic(title)
+                item["semester"] = semester # Persist healed value
             
             # REQUIREMENT: Live Classes (with links) go to BOTH:
             # 1. sol_live_classes (Semester 0) for the main landing page
