@@ -1644,7 +1644,7 @@ puppeteer.use(StealthPlugin());
             
             # CRITICAL: Skip BeautifulSoup if content is binary or a PDF
             # This prevents internal html.parser from crashing on binary junk charrefs
-            if url.lower().endswith(".pdf") or html.startswith("%PDF-") or "\x00" in html[:100]:
+            if url.lower().endswith(".pdf") or html.startswith("%PDF-") or "\x00" in html:
                 continue
 
             soup = BeautifulSoup(html, "html.parser")
