@@ -2194,6 +2194,11 @@ puppeteer.use(StealthPlugin());
 
         for category in target_categories:
             for semester in target_semesters:
+                # Sem 0 sirf live-classes landing page ke liye hai.
+                # Notifications me Sem 0 sync karne se with-link classes
+                # Gen tab me dikh jaati hain — isliye skip karo.
+                if category == "notifications" and semester == "0":
+                    continue
                 items = groups[category].get(semester, []) # type: ignore
                 if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=allow_deletions):
                     stats["groups_synced"] += 1 # type: ignore
