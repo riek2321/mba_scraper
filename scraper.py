@@ -2159,27 +2159,11 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(title)
                 item["semester"] = semester # Persist healed value
             
-            # REQUIREMENT: Live Classes (with links) go to BOTH:
-            # 1. sol_live_classes (Semester 0) for the main landing page
-            # 2. sol_notifications (Original Semester) for the news feed
-            
-            if category == "live-classes":
-                # Entry for Classes PORTAL (Category: live-classes, Semester: 0)
-                if "0" not in groups["live-classes"]:
-                    groups["live-classes"]["0"] = []
-                groups["live-classes"]["0"].append(item.copy())
-                
-                # Entry for NOTIFICATION FEED (Category: notifications, Semester: Real)
-                if semester not in groups["notifications"]:
-                    groups["notifications"][semester] = []
-                # IMPORTANT: If semester is "0", it's a generic notice. 
-                # If it's a real class, it should be in 1-4.
-                groups["notifications"][semester].append(item)
-            else:
-                # Regular Notification (keeps original semester)
-                if semester not in groups["notifications"]:
-                    groups["notifications"][semester] = []
-                groups["notifications"][semester].append(item)
+            # REQUIREMENT: Send only to Notification Feed (Semester-specific)
+            # This preserves the user's recorded classes archive (live-classes cat)
+            if semester not in groups["notifications"]:
+                groups["notifications"][semester] = []
+            groups["notifications"][semester].append(item)
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
