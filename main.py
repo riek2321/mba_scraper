@@ -56,10 +56,7 @@ async def job(days_back: int = 15, targets: Optional[List[str]] = None, mode: st
         print(f"[JOB]: Found {len(results)} possible MBA items.")
         
         # Sync logic (BULK SYNC) - Optimized for accuracy and deletions
-        for sem in ["0", "1", "2", "3", "4"]:
-            sem_results = [r for r in results if str(r.get('semester')) == sem]
-            if sem_results:
-                notifier.sync_bulk_to_website(sem, sem_results)
+        scraper.sync_results(results, notifier, "synced_ids.json")
                     
         print(f"[JOB]: Finished Scraper Job.")
     except Exception as e:

@@ -121,16 +121,16 @@ class Notifier:
             print(f"[RESET]: Failed to clear category '{category}' (Status: {resp.status_code if resp else 'No Response'})")
             return False
 
-    def sync_bulk_to_website(self, semester, items):
+    def sync_bulk_to_website(self, category, semester, items):
         """
         🚀 BULK SYNC: Sends a full list of current notices for a semester.
         The backend handles Adds, Updates (links), and Deletions.
         """
-        url = f"{self.website_api_url}/api/sol/sync-bulk/{semester}"
+        url = f"{self.website_api_url}/api/sol/sync-bulk/{category}/{semester}"
         payload = {"items": items}
         headers = {"Content-Type": "application/json", "x-scraper-key": self.scraper_key}
         
-        print(f"[API][BULK]: Syncing {len(items)} items for Semester {semester}...")
+        print(f"[API][BULK]: Syncing {len(items)} items for {category} Semester {semester}...")
         resp = self._request_with_retry("POST", url, json=payload, headers=headers)
         
         if resp is not None:

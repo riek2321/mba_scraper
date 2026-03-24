@@ -2134,7 +2134,7 @@ puppeteer.use(StealthPlugin());
         for category in target_categories:
             for semester in target_semesters:
                 items = groups[category].get(semester, []) # type: ignore
-                if notifier.bulk_sync_to_website(category, semester, items):
+                if notifier.sync_bulk_to_website(category, semester, items):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore
