@@ -1641,6 +1641,11 @@ puppeteer.use(StealthPlugin());
             html = await self.fetch_cffi(url)
             if not html:
                 continue
+            
+            # CRITICAL: Skip BeautifulSoup if content is binary or a PDF
+            # This prevents internal html.parser from crashing on binary junk charrefs
+            if url.lower().endswith(".pdf") or html.startswith("%PDF-") or "\x00" in html[:100]:
+                continue
 
             soup = BeautifulSoup(html, "html.parser")
 
