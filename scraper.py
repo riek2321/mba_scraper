@@ -2127,26 +2127,27 @@ puppeteer.use(StealthPlugin());
                 category = "notifications"
             else:
                 category = "live-classes" if is_class else "notifications"
-            # REQUIREMENT: Force Live Classes to Semester 0 to keep archives clean.
-            # Notifications will keep their original semester as requested.
+            # REQUIREMENT: Live Classes (with links) go to BOTH:
+            # 1. sol_live_classes (Semester 0) for the main landing page
+            # 2. sol_notifications (Original Semester) for the news feed
+            
             if category == "live-classes":
-                sync_semester = "0"
+                # Entry for Classes (Sem 0)
+                if "0" not in groups["live-classes"]:
+                    groups["live-classes"]["0"] = []
+                # Use Semester 0 for the Classes bucket
+                class_item = item.copy()
+                groups["live-classes"]["0"].append(class_item)
+                
+                # Entry for Notifications (Original Semester)
+                if semester not in groups["notifications"]:
+                    groups["notifications"][semester] = []
+                groups["notifications"][semester].append(item)
             else:
-                sync_semester = semester
-            
-            idate = str(item.get("date", "0"))
-
-            # AGGRESSIVE DEDUPLICATION: Use cleaned subject name
-            subject_core = clean_subject(title)
-            dupe_key = f"{category}|{sync_semester}|{idate}|{subject_core}"
-            
-            if dupe_key in unique_check:
-                continue
-            unique_check.add(dupe_key)
-            
-            if sync_semester not in groups[category]:
-                groups[category][sync_semester] = []
-            groups[category][sync_semester].append(item)
+                # Regular Notification (keeps original semester)
+                if semester not in groups["notifications"]:
+                    groups["notifications"][semester] = []
+                groups["notifications"][semester].append(item)
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
