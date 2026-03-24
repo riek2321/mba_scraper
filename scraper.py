@@ -1962,6 +1962,8 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw) # type: ignore
                 if semester == "0":
                     semester = self.extract_semester_logic(course)
+                if semester == "0":
+                    semester = self.extract_semester_logic(subj)
                 time_txt = next(
                     (str(c.get("text", "")) for c in cells
                      if re.search(r"\d{1,2}:\d{2}", str(c.get("text", "")))), ""
