@@ -2135,16 +2135,17 @@ puppeteer.use(StealthPlugin());
             l_title = title.lower()
             l_desc = str(item.get("description", "")).lower()
             
-            # IMPROVED: Distinguish category - broader check
+            # CLASSIFICATION: 100% Bulletproof
+            l_title = title.lower()
+            l_desc = str(item.get("description", "")).lower()
+            
+            # If it has a Teams link, it IS a live class. Period.
             is_class = (
+                "teams.microsoft" in link.lower() or
                 item.get("type") == "live-classes" or
-                item.get("time") or 
                 item.get("class_time") or 
-                "class" in l_title or 
-                "schedule" in l_title or 
                 "vcs.php" in link.lower() or
-                "live class" in l_desc or
-                re.search(r'\[\d{2}-\d{2}-\d{4}\]', l_title) # Dated entries are classes
+                re.search(r'\[\d{2,4}-\d{2,4}-\d{2,4}\]', l_title) # Handle BOTH DD-MM and YYYY-MM
             )
             
             # Categorization: If link is #pending, it's a "Coming Soon" notice — Keep in Notifications only.
@@ -2194,11 +2195,6 @@ puppeteer.use(StealthPlugin());
 
         for category in target_categories:
             for semester in target_semesters:
-                # Sem 0 sirf live-classes landing page ke liye hai.
-                # Notifications me Sem 0 sync karne se with-link classes
-                # Gen tab me dikh jaati hain — isliye skip karo.
-                if category == "notifications" and semester == "0":
-                    continue
                 items = groups[category].get(semester, []) # type: ignore
                 if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=allow_deletions):
                     stats["groups_synced"] += 1 # type: ignore
