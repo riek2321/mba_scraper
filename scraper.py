@@ -2127,6 +2127,8 @@ puppeteer.use(StealthPlugin());
                 category = "notifications"
             else:
                 category = "live-classes" if is_class else "notifications"
+            semester = str(item.get("semester", "0"))
+            
             # REQUIREMENT: Live Classes (with links) go to BOTH:
             # 1. sol_live_classes (Semester 0) for the main landing page
             # 2. sol_notifications (Original Semester) for the news feed
