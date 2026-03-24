@@ -50,7 +50,7 @@ def run_sync():
             logger.error(f"Failed to load spec for {main_path}")
             return
             
-        mba_main = importlib.util.module_from_spec(spec)
+        mba_main = importlib.util.module_from_spec(spec) # type: ignore
         spec.loader.exec_module(mba_main)
         main_job = getattr(mba_main, 'main_job', None)
         
