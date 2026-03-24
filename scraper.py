@@ -2009,7 +2009,9 @@ puppeteer.use(StealthPlugin());
     def extract_semester_logic(self, text: str) -> str:
         if not text:
             return "0"
-        t = text.upper().replace("-", " ").replace(".", " ")
+        # CLEANING: Remove dates in format [DD-MM-YYYY] or DD-MM-YYYY to prevent misidentifying date components as semesters
+        cleaned_text = re.sub(r"\[?\d{1,2}[-/]\d{1,2}[-/]\d{4}\]?", "", text)
+        t = cleaned_text.upper().replace("-", " ").replace(".", " ")
         if "1ST" in t or "FIRST" in t:
             return "1"
         if "2ND" in t or "SECOND" in t:
