@@ -2121,7 +2121,12 @@ puppeteer.use(StealthPlugin());
                 "live class" in l_desc or
                 re.search(r'\[\d{2}-\d{2}-\d{4}\]', l_title) # Dated entries are classes
             )
-            category = "live-classes" if is_class else "notifications"
+            
+            # Categorization: If link is #pending, it's a "Coming Soon" notice — Keep in Notifications only.
+            if link == "#pending":
+                category = "notifications"
+            else:
+                category = "live-classes" if is_class else "notifications"
             semester = str(item.get("semester", "0"))
             idate = str(item.get("date", "0"))
 
