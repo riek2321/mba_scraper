@@ -1900,15 +1900,20 @@ puppeteer.use(StealthPlugin());
         # Year filter
         filtered, seen_links = [], set()
         for item in results:
-            if item["link"] in seen_links:
+            # FIX: Don't deduplicate #pending links, they are placeholders for different classes
+            link = item.get("link", "#pending")
+            if link != "#pending" and link in seen_links:
                 continue
+            
             try:
                 yr = int(item.get("date", "").split("-")[0])
             except (ValueError, IndexError):
                 yr = self.current_year
+            
             if yr == self.current_year:
                 filtered.append(item)
-                seen_links.add(item["link"])
+                if link != "#pending":
+                    seen_links.add(link)
         return filtered
 
     async def _extract_frames_html(self, page: Any) -> Optional[str]:
