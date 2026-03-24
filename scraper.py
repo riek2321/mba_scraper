@@ -2127,11 +2127,13 @@ puppeteer.use(StealthPlugin());
                 category = "notifications"
             else:
                 category = "live-classes" if is_class else "notifications"
-            semester = str(item.get("semester", "0"))
-            
             # REQUIREMENT: Force Live Classes to Semester 0 to keep archives clean.
-            # Notifications will keep their original semester.
-            sync_semester = "0" if category == "live-classes" else semester
+            # Notifications will keep their original semester as requested.
+            if category == "live-classes":
+                sync_semester = "0"
+            else:
+                sync_semester = semester
+            
             idate = str(item.get("date", "0"))
 
             # AGGRESSIVE DEDUPLICATION: Use cleaned subject name
