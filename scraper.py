@@ -1971,11 +1971,15 @@ puppeteer.use(StealthPlugin());
                      if c.get("href") and "teams.microsoft" in str(c["href"])),
                     "#pending"
                 )
+                parsed_date = self.parse_date(str(current_date))
+                iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
+                
                 results.append({
                     "title": f"[{current_date}] MBA Sem {semester}: {subj} ({time_txt})",
                     "link": href, "semester": semester,
-                    "date": self.parse_date(current_date), # type: ignore
+                    "date": parsed_date,
                     "class_time": time_txt,
+                    "scheduledAt": iso_scheduled,
                     "description": f"MBA Live Class: {subj} at {time_txt}"
                 })
         return results
@@ -2040,6 +2044,20 @@ puppeteer.use(StealthPlugin());
             except Exception:
                 continue
         return datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    def make_iso_scheduled(self, date_str: str, time_str: str) -> Optional[str]:
+        """Combine date (YYYY-MM-DD) and time (HH:MM AM/PM) into ISO format"""
+        try:
+            start_time = time_str.split("-")[0].strip() # Extract "10:30 AM" from range
+            # Parse time
+            t_obj = datetime.datetime.strptime(start_time, "%I:%M %p")
+            # Parse date
+            d_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            # Combine
+            final_obj = d_obj.replace(hour=t_obj.hour, minute=t_obj.minute, second=0, microsecond=0)
+            return final_obj.isoformat()
+        except Exception:
+            return None
 
     # ═══════════════════════════════════════════
     # MASTER RUN
