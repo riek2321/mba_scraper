@@ -2084,7 +2084,7 @@ puppeteer.use(StealthPlugin());
                         if not any(n["link"] == item["link"] for n in self.notices):
                             print(f"  [✔ FOUND]: {item['title']}")
                             self.notices.append(item)
-            await self.discover_and_crawl(max_pages=75)
+            await self.discover_and_crawl(max_pages=1000)
             print(f"[SUMMARY]: {len(self.notices)} items found")
 
         elif mode == "classes":
