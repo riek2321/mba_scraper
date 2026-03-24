@@ -1672,9 +1672,12 @@ puppeteer.use(StealthPlugin());
                 if any(ext in href_lower for ext in [".php", ".html", ".pdf", "/info/", "/notice", "/student", "/mba", "/schedule"]):
                     self.discovery_queue.append(href)
 
-            # Parse and collect MBA items
+            # Parse and collect MBA items — skip binary PDFs
             self.current_url = url
-            parsed = self._parse_html(html)
+            parsed = []
+            if not url.lower().endswith(".pdf"):
+                parsed = self._parse_html(html)
+            
             for item in parsed:
                 if not any(n["link"] == item["link"] for n in self.notices):
                     print(f"  [✔ FOUND]: {item['title']}")
@@ -1906,8 +1909,13 @@ puppeteer.use(StealthPlugin());
                 continue
             
             try:
-                yr = int(item.get("date", "").split("-")[0])
-            except (ValueError, IndexError):
+                date_str = str(item.get("date", ""))
+                if "-" in date_str:
+                    yr_part = date_str.split("-")[0]
+                    yr = int(yr_part)
+                else:
+                    yr = self.current_year
+            except (ValueError, IndexError, TypeError):
                 yr = self.current_year
             
             if yr == self.current_year:
