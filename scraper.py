@@ -2055,14 +2055,39 @@ puppeteer.use(StealthPlugin());
     
     def make_iso_scheduled(self, date_str: str, time_str: str) -> Optional[str]:
         """Combine date (YYYY-MM-DD) and time (HH:MM AM/PM) into ISO format"""
+        if not date_str or not time_str: return None
         try:
-            start_time = time_str.split("-")[0].strip() # Extract "10:30 AM" from range
-            # Parse time
-            t_obj = datetime.datetime.strptime(start_time, "%I:%M %p")
-            # Parse date
+            # 1. Clean up time string (e.g. "10:00 am - 11:30 am" -> "10:00 am")
+            clean_time = time_str.split("-")[0].strip().lower()
+            
+            # 2. Extract HH:MM and AM/PM
+            m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", clean_time)
+            if not m: return None
+            
+            hh, mm, period = m.groups()
+            hh, mm = int(hh), int(mm)
+            
+            # Logic: 
+            # - If period is PM: Add 12 to hours 1-11
+            # - If period is AM: Convert 12 to 0
+            # - If NO period: 
+            #     a) If hh > 12: Treat as 24-hour (keep as is)
+            #     b) If 1 <= hh <= 7: Assume PM (e.g. 2:00 -> 14:00)
+            #     c) Else: Keep as is (AM)
+            
+            if period == 'pm' and hh < 12: 
+                hh += 12
+            elif period == 'am' and hh == 12: 
+                hh = 0
+            elif not period:
+                if 1 <= hh <= 7: # Handle common afternoon shortcut (e.g. 3:00)
+                    hh += 12
+                # If hh is already > 12 (e.g. 14:00), it remains untouched.
+            
+            # 3. Parse date
             d_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            # Combine
-            final_obj = d_obj.replace(hour=t_obj.hour, minute=t_obj.minute, second=0, microsecond=0)
+            # 4. Combine
+            final_obj = d_obj.replace(hour=hh, minute=mm, second=0, microsecond=0)
             return final_obj.isoformat()
         except Exception:
             return None
