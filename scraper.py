@@ -1974,6 +1974,8 @@ puppeteer.use(StealthPlugin());
                      if c.get("href") and "teams.microsoft" in str(c["href"])),
                     "#pending"
                 )
+                # Standardize current_date to use hyphens for cleaner parsing
+                current_date = str(current_date).replace('/', '-')
                 parsed_date = self.parse_date(str(current_date))
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
@@ -2197,10 +2199,25 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(title)
                 item["semester"] = semester # Persist healed value
             
-            # Distribute dynamically to the appropriate category (notifications OR live-classes)
-            if semester not in groups[category]:
-                groups[category][semester] = []
-            groups[category][semester].append(item)
+            # Ensure scheduledAt is set even if make_iso_scheduled failed (fallback to date only)
+            if not item.get("scheduledAt") and item.get("date"):
+                item["scheduledAt"] = f"{item['date']}T00:00:00"
+
+            # Dual-sync logic: Classes go to BOTH live-classes and notifications
+            # Notices go ONLY to notifications
+            if semester not in groups["notifications"]:
+                groups["notifications"][semester] = []
+            
+            if is_class:
+                if semester not in groups["live-classes"]:
+                    groups["live-classes"][semester] = []
+                groups["live-classes"][semester].append(item)
+                
+                # Classes also appear in notifications feed
+                groups["notifications"][semester].append(item)
+            else:
+                # Regular notices only in notifications
+                groups["notifications"][semester].append(item)
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
