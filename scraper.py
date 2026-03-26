@@ -2156,14 +2156,16 @@ puppeteer.use(StealthPlugin());
                 item.get("type") == "live-classes" or
                 item.get("class_time") or 
                 "vcs.php" in link.lower() or
-                re.search(r'\[\d{2,4}-\d{2,4}-\d{2,4}\]', l_title) # Handle BOTH DD-MM and YYYY-MM
+                re.search(r'\[\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\]', l_title) # Handle BOTH DD-MM and YYYY-MM
             )
             
-            # Categorization: If link is #pending, it's a "Coming Soon" notice — Keep in Notifications only.
-            if link == "#pending":
-                category = "notifications"
+            # Categorization: If it's a class (has Teams link or recognized as class), 
+            # always put it in live-classes, even if the link is #pending.
+            if is_class:
+                category = "live-classes"
             else:
-                category = "live-classes" if is_class else "notifications"
+                category = "notifications"
+                
             semester = str(item.get("semester", "0"))
             # HEALER: If semester is "0", try to find it in the title
             if semester == "0" and title:
