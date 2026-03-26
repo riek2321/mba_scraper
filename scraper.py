@@ -1923,7 +1923,8 @@ puppeteer.use(StealthPlugin());
             except (ValueError, IndexError, TypeError):
                 yr = self.current_year
             
-            if yr == self.current_year:
+            # Allow current year and future years, but completely block past years
+            if yr >= self.current_year:
                 filtered.append(item)
                 if link != "#pending":
                     seen_links.add(link)
@@ -2071,9 +2072,19 @@ puppeteer.use(StealthPlugin());
     # ═══════════════════════════════════════════
     async def run(self: Any, days_back: int = 15, mode: str = "all",
                   targets: Optional[List[str]] = None) -> list:
+        
+        is_termux = os.environ.get("IS_TERMUX", "false").lower() == "true"
+        
         if mode == "all":
-            print("[OMNI]: COMPREHENSIVE scan (Classes + Notices + Discovery)")
-            self.notices.extend(await self.run_class_chain())
+            print(f"[OMNI]: COMPREHENSIVE scan (Classes + Notices + Discovery) | Termux mode: {is_termux}")
+            if is_termux:
+                self.notices.extend(await self.run_class_chain())
+            else:
+                print("[OMNI]: Non-Termux host. Skipping Class Schedule (delegated to phone).")
+                # Remove schedule URL from crawler queue so it doesn't discover it
+                if "https://web.sol.du.ac.in/info/online-class-schedule" in self.discovery_queue:
+                    self.discovery_queue.remove("https://web.sol.du.ac.in/info/online-class-schedule")
+            
             await self.discover_and_crawl(max_pages=1000)
             print(f"[SUMMARY]: Total MBA items: {len(self.notices)}")
 
@@ -2159,11 +2170,10 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(title)
                 item["semester"] = semester # Persist healed value
             
-            # REQUIREMENT: Send only to Notification Feed (Semester-specific)
-            # This preserves the user's recorded classes archive (live-classes cat)
-            if semester not in groups["notifications"]:
-                groups["notifications"][semester] = []
-            groups["notifications"][semester].append(item)
+            # Distribute dynamically to the appropriate category (notifications OR live-classes)
+            if semester not in groups[category]:
+                groups[category][semester] = []
+            groups[category][semester].append(item)
 
         # 2. Perform Bulk Syncs
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
@@ -2176,11 +2186,21 @@ puppeteer.use(StealthPlugin());
 
         target_semesters = ["0", "1", "2", "3", "4"]
         target_categories = ["notifications", "live-classes"]
+        
+        is_termux_env = os.environ.get("IS_TERMUX", "false").lower() == "true"
 
         for category in target_categories:
             for semester in target_semesters:
                 items = groups[category].get(semester, []) # type: ignore
-                if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=allow_deletions):
+                
+                # CRITICAL: Prevent GitHub from wiping out live-classes it didn't scrape!
+                # If we are syncing "live-classes" but we didn't scrape them (not Termux),
+                # NEVER allow deletions during bulk sync.
+                current_allow_deletions = allow_deletions
+                if category == "live-classes" and not is_termux_env:
+                    current_allow_deletions = False
+                    
+                if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=current_allow_deletions):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore

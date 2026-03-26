@@ -35,6 +35,11 @@ def run_sync():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         os.chdir(script_dir)
         
+        # Identity flag for scraper.py
+        os.environ["IS_TERMUX"] = "true"
+        # Prevent Android Doze from suspending the process
+        os.system("termux-wake-lock > /dev/null 2>&1")
+        
         # Dynamically load the main module
         # Check both current dir and subdirectory
         main_path = os.path.join(script_dir, 'main.py')
