@@ -1817,7 +1817,7 @@ puppeteer.use(StealthPlugin());
     # ═══════════════════════════════════════════
     # PARSING
     # ═══════════════════════════════════════════
-    def _parse_html(self: Any, html: str) -> List[Dict[str, Any]]:
+    def _parse_html(self, html: str) -> List[Dict[str, Any]]:
         soup = BeautifulSoup(html, "html.parser")
         results: List[Dict[str, Any]] = []
         is_home = "home.php" in self.current_url.lower() # pyre-ignore[16]
@@ -1857,35 +1857,50 @@ puppeteer.use(StealthPlugin());
                 if not current_date:
                     continue
                 cells = row.find_all(["td", "th"])
-                if len(cells) < 4:
+                # Robust extraction: find subject and time by content instead of index
+                subj = ""
+                time_txt = ""
+                sem_raw = ""
+                teacher = "Unknown"
+                
+                # Sem/Year is usually cells[1]
+                if len(cells) > 1: sem_raw = cells[1].get_text(strip=True)
+                if len(cells) > 5: teacher = cells[5].get_text(strip=True)
+                
+                for idx, c in enumerate(cells):
+                    txt = c.get_text(strip=True)
+                    # Subject is usually cells[2]
+                    if idx == 2 or (idx < 4 and not subj and len(txt) > 5 and ":" not in txt):
+                        subj = txt
+                    # Time pattern detection
+                    if re.search(r"\d{1,2}:\d{2}", txt):
+                        time_txt = txt
+                
+                if not any(kw.lower() in row.get_text().lower() for kw in self.keywords): # type: ignore
                     continue
-                course = cells[0].get_text(strip=True)
-                sem_raw = cells[1].get_text(strip=True)
-                subj = cells[2].get_text(strip=True)
-                if not any(kw.lower() in course.lower() for kw in self.keywords): # type: ignore
-                    continue
+                
                 semester = self.extract_semester_logic(sem_raw) # type: ignore
-                if semester == "0":
-                    semester = self.extract_semester_logic(course) # pyre-ignore[16]
-                if semester == "0":
-                    semester = self.extract_semester_logic(subj) # pyre-ignore[16]
-                time_txt = next(
-                    (c.get_text(strip=True) for c in cells
-                     if re.search(r"\d{1,2}:\d{2}", c.get_text())), ""
-                )
-                teacher = cells[5].get_text(strip=True) if len(cells) > 5 else "Unknown"
+                if semester == "0": semester = self.extract_semester_logic(subj) # type: ignore
+                
                 raw_href = next(
                     (a["href"] for c in reversed(cells)
                      for a in [c.find("a")] if a and a.get("href")),
                     "#pending"
                 )
-                abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending" # pyre-ignore[16]
+                abs_link = urljoin(self.current_url, raw_href) if raw_href != "#pending" else "#pending" # type: ignore
+                
+                # Standardize date and parse
+                clean_date = str(current_date).replace('/', '-')
+                parsed_date = self.parse_date(clean_date)
+                iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
+                
                 results.append({
-                    "title": f"[{current_date}] Sem {semester}: {subj}"[:100], # type: ignore
+                    "title": f"[{clean_date}] MBA SEM {semester}: {subj} ({time_txt})",
                     "link": abs_link, "semester": semester,
-                    "date": self.parse_date(current_date), # type: ignore
+                    "date": parsed_date,
                     "class_time": time_txt,
-                    "description": f"Live Class: {subj} (Teacher: {teacher})"
+                    "scheduledAt": iso_scheduled,
+                    "description": f"MBA Live Class: {subj} at {time_txt} (Teacher: {teacher})"
                 })
 
         # General MBA links
