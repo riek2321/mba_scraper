@@ -410,6 +410,31 @@ class MBAScraper:
         for k, v in self.keys.items():
             if v:
                 print(f"[OMNI][KEY]: {k} ✅ present")
+        
+        # v73.9: Manual Deletion Persistence
+        self.dismissed_file = "dismissed_links.json"
+        self.dismissed_links = self._load_json(self.dismissed_file, set)
+        print(f"[OMNI]: Loaded {len(self.dismissed_links)} dismissed links (Blacklist).")
+
+    def _load_json(self, path: str, type_fn: Any = list) -> Any:
+        try:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return type_fn(data)
+        except Exception:
+            pass
+        return type_fn()
+
+    def _save_json(self, path: str, data: Any):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                # Convert set to list if needed
+                if isinstance(data, set):
+                    data = list(data)
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[FILE-ERROR]: Could not save {path} -> {e}")
 
     def _iframe_headers(self, ua: Optional[str] = None) -> dict:
         return {
@@ -2247,6 +2272,13 @@ puppeteer.use(StealthPlugin());
             print("[OMNI]: CLASS SCHEDULE ONLY scan")
             self.notices.extend(await self.run_class_chain())
 
+        # v73.9: Filter out blacklisted links (Manually Dismissed items)
+        if self.dismissed_links:
+            pre_count = len(self.notices)
+            self.notices = [n for n in self.notices if str(n.get("link")) not in self.dismissed_links]
+            if len(self.notices) < pre_count:
+                print(f"[OMNI]: 🛡️ Filtered {pre_count - len(self.notices)} blacklisted (manually deleted) items.")
+
         return self.notices
 
     # ═══════════════════════════════════════════
@@ -2357,11 +2389,64 @@ puppeteer.use(StealthPlugin());
                 current_allow_deletions = allow_deletions
                 if category == "live-classes" and not is_termux_env:
                     current_allow_deletions = False
+                
+                # v73.8: DELEGATION SAFETY GUARD
+                # If we have no items and we aren't allowing deletions, it means 
+                # this category/semester is likely delegated to another environment (Phone).
+                # Skip the sync entirely to preserve current data.
+                if not items and not current_allow_deletions:
+                    print(f"[SYNC]: 🛡️ Skipping {category} SEM {semester} (No items & deletions disabled). Preserving phone data.")
+                    continue
                     
                 if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=current_allow_deletions):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore
+
+        # v73.9: Manual Dismissal & Restore Detection
+        # If an item was in our history (synced_ids.json) but is MISSING from the 
+        # backend, it means an Admin deleted it. We add it to dismissed_links.json
+        # so we don't re-add it in the next crawl.
+        history = self._load_json(memory_file, set)
+        backend_items_all = []
+        for sem in ["0", "1", "2", "3", "4"]:
+            b_data = notifier.get_from_website(sem)
+            if b_data: backend_items_all.extend(b_data)
+        
+        backend_links = {str(b.get("link", "")) for b in backend_items_all}
+        
+        c_stats = {"dismissed": 0, "restored": 0}
+        
+        # 1. Detect Manual DELETIONS (Synced before -> Now missing from backend)
+        for old_link in history:
+            old_link_str = str(old_link)
+            if old_link_str not in backend_links and old_link_str != "#pending":
+                # Check if it was in our RECENT scrape (meaning SOL still has it)
+                was_in_current_scrape = any(str(r.get("link")) == old_link_str for r in results)
+                if was_in_current_scrape and old_link_str not in self.dismissed_links:
+                    print(f"  [DISMISS]: Blacklisting link: {old_link_str}")
+                    self.dismissed_links.add(old_link_str)
+                    c_stats["dismissed"] = c_stats["dismissed"] + 1
+        
+        # 2. Detect Manual RESTORES (Blacklisted link -> Now present in backend)
+        # If an admin manually adds it back, remove it from the blacklist.
+        links_to_restore = []
+        for bl_link in self.dismissed_links:
+            if str(bl_link) in backend_links:
+                links_to_restore.append(bl_link)
+        
+        for r_link in links_to_restore:
+            print(f"  [RESTORE]: Unblocking link: {str(r_link)}")
+            self.dismissed_links.remove(r_link)
+            c_stats["restored"] = c_stats["restored"] + 1
+        
+        if c_stats["dismissed"] or c_stats["restored"]:
+            self._save_json(self.dismissed_file, self.dismissed_links)
+
+        # Update history with current scrape
+        current_links = {str(r.get("link", "")) for r in results if r.get("link") and r["link"] != "#pending"}
+        history.update(current_links)
+        self._save_json(memory_file, history)
 
         print(f"[SYNC]: Done. {stats['groups_synced']} category/semester groups refreshed.")
 
