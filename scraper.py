@@ -1965,10 +1965,14 @@ puppeteer.use(StealthPlugin());
                     semester = self.extract_semester_logic(course)
                 if semester == "0":
                     semester = self.extract_semester_logic(subj)
-                time_txt = next(
-                    (str(c.get("text", "")) for c in cells
-                     if re.search(r"\d{1,2}:\d{2}", str(c.get("text", "")))), ""
-                )
+                # Find the 'Class Time' cell (usually contains HH:MM)
+                time_txt = ""
+                for cell in cells:
+                    cell_text = str(cell.get_text(strip=True))
+                    time_match = re.search(r"(\d{1,2}:\d{2})\s*(-|to|till)?\s*(\d{1,2}:\d{2})?\s*(am|pm)?", cell_text, re.IGNORECASE)
+                    if time_match:
+                        time_txt = cell_text
+                        break
                 href = next(
                     (str(c["href"]) for c in reversed(cells) # type: ignore
                      if c.get("href") and "teams.microsoft" in str(c["href"])),
