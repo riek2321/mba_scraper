@@ -1955,36 +1955,42 @@ puppeteer.use(StealthPlugin());
                         continue
                 if not current_date or len(cells) < 4:
                     continue
-                course = str(cells[0].get("text", "")).strip()
-                sem_raw = str(cells[1].get("text", "")).strip()
-                subj = str(cells[2].get("text", "")).strip()
-                if not any(kw.lower() in course.lower() for kw in self.keywords): # type: ignore
-                    continue
-                semester = self.extract_semester_logic(sem_raw) # type: ignore
-                if semester == "0":
-                    semester = self.extract_semester_logic(course)
-                if semester == "0":
-                    semester = self.extract_semester_logic(subj)
-                # Find the 'Class Time' cell (usually contains HH:MM)
+                
+                # Robust extraction: find subject and time by content instead of index
+                subj = ""
                 time_txt = ""
-                for cell in cells:
-                    cell_text = str(cell.get_text(strip=True))
-                    time_match = re.search(r"(\d{1,2}:\d{2})\s*(-|to|till)?\s*(\d{1,2}:\d{2})?\s*(am|pm)?", cell_text, re.IGNORECASE)
-                    if time_match:
-                        time_txt = cell_text
-                        break
+                sem_raw = ""
+                
+                # Sem/Year is usually cells[1]
+                if len(cells) > 1: sem_raw = str(cells[1].get_text(strip=True))
+                
+                for idx, cell in enumerate(cells):
+                    txt = str(cell.get_text(strip=True))
+                    # Subject is usually cells[2] or similar, but avoid the time cell
+                    if idx == 2 or (idx < 4 and not subj and len(txt) > 5 and ":" not in txt):
+                        subj = txt
+                    # Time pattern detection (24h or 12h)
+                    if re.search(r"\d{1,2}:\d{2}", txt):
+                        time_txt = txt
+                
+                if not any(kw.lower() in combined.lower() for kw in self.keywords):
+                    continue
+                
+                semester = self.extract_semester_logic(sem_raw)
+                if semester == "0": semester = self.extract_semester_logic(subj)
+                
                 href = next(
-                    (str(c["href"]) for c in reversed(cells) # type: ignore
-                     if c.get("href") and "teams.microsoft" in str(c["href"])),
+                    (str(c["href"]) for c in reversed(cells) if c.get("href") and "teams.microsoft" in str(c["href"])),
                     "#pending"
                 )
-                # Standardize current_date to use hyphens for cleaner parsing
-                current_date = str(current_date).replace('/', '-')
-                parsed_date = self.parse_date(str(current_date))
+                
+                # Standardize current_date and parse
+                clean_date = str(current_date).replace('/', '-')
+                parsed_date = self.parse_date(clean_date)
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
                 results.append({
-                    "title": f"[{current_date}] {subj} ({time_txt})",
+                    "title": f"[{clean_date}] {subj} ({time_txt})",
                     "link": href, "semester": semester,
                     "date": parsed_date,
                     "class_time": time_txt,
