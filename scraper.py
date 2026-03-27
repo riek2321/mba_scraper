@@ -2069,26 +2069,33 @@ puppeteer.use(StealthPlugin());
             hh, mm, period = m.groups()
             hh, mm = int(hh), int(mm)
             
-            # Logic: 
-            # - If period is PM: Add 12 to hours 1-11
-            # - If period is AM: Convert 12 to 0
-            # - If NO period: 
-            #     a) If hh > 12: Treat as 24-hour (keep as is)
-            #     b) If 1 <= hh <= 7: Assume PM (e.g. 2:00 -> 14:00)
-            #     c) Else: Keep as is (AM)
+            # Logic for DU SOL 24-hour format (e.g. 15:00, 19:00)
+            # 1. Clean up time string (e.g. "19:00 - 21:00" -> "19:00")
+            clean_time = time_str.split("-")[0].strip().lower()
             
+            # 2. Extract HH:MM and AM/PM
+            m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", clean_time)
+            if not m: return None
+            
+            hh, mm, period = m.groups()
+            hh, mm = int(hh), int(mm)
+            
+            # 3. Handle Period/24h logic
             if period == 'pm' and hh < 12: 
                 hh += 12
             elif period == 'am' and hh == 12: 
                 hh = 0
             elif not period:
-                if 1 <= hh <= 7: # Handle common afternoon shortcut (e.g. 3:00)
+                # Heuristic for DU SOL: 
+                # If it's already 24h (e.g. 15, 19), keep it.
+                # If it's very low (1-7) without AM/PM, it's likely an evening class (e.g. "5:00" -> 17:00)
+                if 1 <= hh <= 7: 
                     hh += 12
-                # If hh is already > 12 (e.g. 14:00), it remains untouched.
+                # Note: 8, 9, 10, 11, 12 remain as AM unless specified otherwise.
             
-            # 3. Parse date
+            # 4. Parse date (YYYY-MM-DD from standardize replace)
             d_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            # 4. Combine
+            # 5. Combine
             final_obj = d_obj.replace(hour=hh, minute=mm, second=0, microsecond=0)
             return final_obj.isoformat()
         except Exception:
