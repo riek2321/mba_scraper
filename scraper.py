@@ -1990,7 +1990,7 @@ puppeteer.use(StealthPlugin());
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
                 results.append({
-                    "title": f"[{clean_date}] {subj} ({time_txt})",
+                    "title": f"[{clean_date}] MBA SEM {semester}: {subj} ({time_txt})",
                     "link": href, "semester": semester,
                     "date": parsed_date,
                     "class_time": time_txt,
