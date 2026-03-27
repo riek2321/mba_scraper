@@ -1962,10 +1962,10 @@ puppeteer.use(StealthPlugin());
                 sem_raw = ""
                 
                 # Sem/Year is usually cells[1]
-                if len(cells) > 1: sem_raw = str(cells[1].get_text(strip=True))
+                if len(cells) > 1: sem_raw = str(cells[1].get("text", "")).strip()
                 
-                for idx, cell in enumerate(cells):
-                    txt = str(cell.get_text(strip=True))
+                for idx, c in enumerate(cells):
+                    txt = str(c.get("text", "")).strip()
                     # Subject is usually cells[2] or similar, but avoid the time cell
                     if idx == 2 or (idx < 4 and not subj and len(txt) > 5 and ":" not in txt):
                         subj = txt
