@@ -2126,71 +2126,79 @@ puppeteer.use(StealthPlugin());
         except Exception:
             return None
 
-    async def scrape_pg_timetables(self, browser_context: Any) -> List[Dict[str, Any]]:
+    async def scrape_pg_timetables(self) -> List[Dict[str, Any]]:
         """
-        Scrapes PG Time Tables from SOL website.
-        Detects MBA schedules, parses validity dates, and auto-purges expired ones.
+        Scrapes PG Time Tables via direct SOL JSON API (Browserless).
         """
-        print("\n[OMNI]: ═══ PG TIME TABLE SCRAPER (PG COURSES) ═══")
-        url = "https://web.sol.du.ac.in/info/all-pg-class-time-table-sem-3-and-5"
+        print("\n[OMNI]: ═══ PG TIME TABLE SCRAPER (API-DRIVEN) ═══")
+        base_api = "https://web.sol.du.ac.in/my_modules/type/PG_TT_SESSION_25_26_SEM2_SEM_4/?operation=get_node"
+        cdn_base = "https://web.sol.du.ac.in/my_modules/type/PG_TT_SESSION_25_26_SEM2_SEM_4/data/root/"
+        
+        folders = [
+            ("2", "PG-TT-SEM-II-CLASS_"),
+            ("4", "PG-TT-SEM-IV-CLASS_")
+        ]
+        
         results = []
-        try:
-            page = await browser_context.new_page()
-            await page.goto(url, wait_until="networkidle", timeout=60000)
-            
-            # Wait for jstree to render anchors
-            await page.wait_for_selector(".jstree-anchor", timeout=15000)
-            
-            anchors = await page.query_selector_all(".jstree-anchor")
-            today = datetime.datetime.now()
-            
-            for anchor in anchors:
-                text = (await anchor.inner_text()).strip()
-                if "MBA" not in text.upper():
+        today = datetime.datetime.now()
+        
+        for sem_val, folder_id in folders:
+            try:
+                print(f"  [PG-API]: Fetching folder {folder_id}...")
+                url = f"{base_api}&id={folder_id}"
+                
+                # Use simple requests since it's a JSON API
+                loop = asyncio.get_event_loop()
+                
+                # Standard pattern to avoid lint errors with run_in_executor
+                def _do_get(u, h):
+                    return requests.get(u, headers=h, timeout=20).json()
+                
+                nodes = await loop.run_in_executor(None, _do_get, url, {"User-Agent": self.user_agent})
+                if not isinstance(nodes, list):
                     continue
                 
-                # Extract Semester
-                semester = "0"
-                if "SEM -II" in text.upper() or "SEM-II" in text.upper(): semester = "2"
-                elif "SEM -IV" in text.upper() or "SEM-IV" in text.upper(): semester = "4"
-                else: semester = self.extract_semester_logic(text)
-                
-                # Extract Dates: "Dated 23.03.2026 to 28.03.2026" or "Dated 26.03.2026"
-                date_match = re.search(r"Dated\s+(\d{2}\.\d{2}\.\d{4})(?:\s+to\s+(\d{2}\.\d{2}\.\d{4}))?", text)
-                if not date_match:
-                    continue
-                
-                start_str = date_match.group(1)
-                end_str = date_match.group(2) or start_str
-                
-                try:
-                    # Validity check: Show until the end of the expiry day
-                    # Use . date() comparison to be safe
-                    end_date = datetime.datetime.strptime(end_str, "%d.%m.%Y")
-                    if today.date() > end_date.date():
-                        # print(f"  [PG-TT]: Skipping expired schedule -> {text}")
+                for node in nodes:
+                    text = node.get("text", "").strip()
+                    node_id = node.get("id", "")
+                    
+                    if "MBA" not in text.upper() or node.get("type") != "file":
                         continue
-                except Exception:
-                    continue
+                        
+                    # Extract Dates: "Dated 23.03.2026 to 28.03.2026" or "Dated 26.03.2026"
+                    date_match = re.search(r"Dated\s+(\d{2}\.\d{2}\.\d{4})(?:\s+to\s+(\d{2}\.\d{2}\.\d{4}))?", text, re.I)
+                    if not date_match:
+                        # Non-dated schedules (fallback to today or created_at)
+                        start_str = today.strftime("%d.%m.%Y")
+                        end_str = start_str
+                    else:
+                        start_str = date_match.group(1)
+                        end_str = date_match.group(2) or start_str
+                    
+                    try:
+                        end_date = datetime.datetime.strptime(end_str, "%d.%m.%Y")
+                        if today.date() > end_date.date():
+                            continue
+                    except Exception:
+                        pass
+                    
+                    # Direct Link: Base + Encoded ID (SOL already encodes them usually)
+                    # We ensure spaces are %20 just in case
+                    final_id = node_id.replace(" ", "%20")
+                    pdf_link = f"{cdn_base}{final_id}"
+                    
+                    results.append({
+                        "title": f"[Timetable] MBA SEM {sem_val}: {text.replace('.pdf','').replace('.PDF','')}",
+                        "link": pdf_link,
+                        "semester": sem_val,
+                        "date": datetime.datetime.strptime(start_str, "%d.%m.%Y").strftime("%Y-%m-%d"),
+                        "description": f"Official PG Time Table valid until {end_str}. Direct PDF Link.",
+                        "type": "notifications"
+                    })
+                    print(f"  [PG-API]: ✅ Success -> {text}")
+            except Exception as e:
+                print(f"  [PG-API]: Error in folder {folder_id} -> {e}")
                 
-                # Construct PDF Link (Deterministic SOL Pattern)
-                folder = "PG-TT-SEM-II-CLASS_" if semester == "2" else "PG-TT-SEM-IV-CLASS_"
-                encoded_filename = text.replace(" ", "%20")
-                pdf_link = f"https://web.sol.du.ac.in/my_modules/type/PG_TT_SESSION_25_26_SEM2_SEM_4/data/root/{folder}/{encoded_filename}"
-                
-                results.append({
-                    "title": f"[Timetable] MBA SEM {semester}: {text.replace('.pdf','')}",
-                    "link": pdf_link,
-                    "semester": semester,
-                    "date": datetime.datetime.strptime(start_str, "%d.%m.%Y").strftime("%Y-%m-%d"),
-                    "description": f"Official PG Time Table valid until {end_str}. Click to download.",
-                    "type": "notifications"
-                })
-                print(f"  [PG-TT]: ✅ Found active schedule -> {text}")
-            
-            await page.close()
-        except Exception as e:
-            print(f"[PG-TT]: Error — {e}")
         return results
 
     # ═══════════════════════════════════════════
@@ -2203,23 +2211,17 @@ puppeteer.use(StealthPlugin());
         
         if mode == "all":
             print(f"[OMNI]: COMPREHENSIVE scan (Classes + Notices + Discovery) | Termux mode: {is_termux}")
+            
+            # 1. PG Time Table (Now API-Driven, works on any host!)
+            pg_tt = await self.scrape_pg_timetables()
+            self.notices.extend(pg_tt)
+
             if is_termux:
-                # 1. Class Schedule Chain (Handles its own Playwright/HTTP methods)
+                # ── Termux Exclusive: Heavy Browser Tasks ──
+                # 2. Class Schedule Chain (vcs.php handles its own Playwright)
                 self.notices.extend(await self.run_class_chain())
-                
-                # 2. PG Time Table (Termux Only - Dedicated PW Session)
-                print("\n[OMNI]: ── Launching Playwright for PG Timetables ──")
-                try:
-                    async with async_playwright() as p:
-                        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-                        context = await browser.new_context(user_agent=self.user_agent)
-                        pg_tt = await self.scrape_pg_timetables(context)
-                        self.notices.extend(pg_tt)
-                        await browser.close()
-                except Exception as e:
-                    print(f"[OMNI]: PG Timetable PW launch failed — {e}")
             else:
-                print("[OMNI]: Non-Termux host. Skipping Class/PG chains (delegated to phone).")
+                print("[OMNI]: Non-Termux host. Skipping heavier Class Chain (delegated to phone).")
                 # Remove schedule URL from crawler queue so it doesn't discover it
                 if "https://web.sol.du.ac.in/info/online-class-schedule" in self.discovery_queue:
                     self.discovery_queue.remove("https://web.sol.du.ac.in/info/online-class-schedule")
