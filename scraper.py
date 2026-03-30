@@ -470,6 +470,13 @@ class MBAScraper:
                 r = session.get(url, headers=h, timeout=30)
                 print(f"[M01][CFFI][{fp}]: {r.status_code}")
                 if r.status_code == 200:
+                    # Case A: Notifications older than 30 days OR generic clutter
+                    if sem == "0" and category == "notifications":
+                        # Purge if older than 30 days OR contains generic study material/merit list keywords
+                        is_clutter = any(bad in str(item.get("title", "")).lower() for bad in ["study material", "syllabus", "course structure", "merit list", "list of candidates"])
+                        if item_date < thirty_ago or is_clutter:
+                            to_delete = True
+                            if is_clutter: print(f"  [CLEANUP]: Purging Sem 0 Clutter -> {item.get('title')}")
                     return r.text
             except Exception as e:
                 print(f"[M01][CFFI][{fp}]: {e}")
@@ -1932,7 +1939,10 @@ puppeteer.use(StealthPlugin());
         seen = {r["link"] for r in results}
         for a in soup.find_all("a", href=True):
             txt = a.get_text().strip()
-            if txt and any(kw.lower() in txt.lower() for kw in self.keywords): # pyre-ignore[16]
+            if txt and any(kw.lower() in txt.lower() for kw in self.keywords): 
+                # v75.4: Filter out generic study materials/syllabus/merit lists from notifications
+                if any(bad in txt.lower() for bad in ["study material", "syllabus", "course structure", "merit list", "list of candidates"]):
+                    continue
                 abs_link = urljoin(self.current_url, a["href"]) # pyre-ignore[16]
                 if abs_link not in seen:
                     seen.add(abs_link)
@@ -2105,32 +2115,17 @@ puppeteer.use(StealthPlugin());
                 continue
         return datetime.datetime.now().strftime("%Y-%m-%d")
     
-    def make_iso_scheduled(self, date_str: str, time_str: str) -> Optional[str]:
-        """Combine date (YYYY-MM-DD) and time (HH:MM AM/PM) into ISO format"""
+    def _parse_time_to_dt(self, date_str: str, time_str: str) -> Optional[datetime.datetime]:
         if not date_str or not time_str: return None
         try:
-            # 1. Clean up time string (e.g. "10:00 am - 11:30 am" -> "10:00 am")
-            clean_time = time_str.split("-")[0].strip().lower()
-            
-            # 2. Extract HH:MM and AM/PM
-            m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", clean_time)
+            # Extract HH:MM and AM/PM
+            m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", time_str.lower())
             if not m: return None
             
             hh, mm, period = m.groups()
             hh, mm = int(hh), int(mm)
             
-            # Logic for DU SOL 24-hour format (e.g. 15:00, 19:00)
-            # 1. Clean up time string (e.g. "19:00 - 21:00" -> "19:00")
-            clean_time = time_str.split("-")[0].strip().lower()
-            
-            # 2. Extract HH:MM and AM/PM
-            m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)?", clean_time)
-            if not m: return None
-            
-            hh, mm, period = m.groups()
-            hh, mm = int(hh), int(mm)
-            
-            # 3. Handle Period/24h logic
+            # Handle Period/24h logic
             if period == 'pm' and hh < 12: 
                 hh += 12
             elif period == 'am' and hh == 12: 
@@ -2141,15 +2136,39 @@ puppeteer.use(StealthPlugin());
                 # If it's very low (1-7) without AM/PM, it's likely an evening class (e.g. "5:00" -> 17:00)
                 if 1 <= hh <= 7: 
                     hh += 12
-                # Note: 8, 9, 10, 11, 12 remain as AM unless specified otherwise.
             
-            # 4. Parse date (YYYY-MM-DD from standardize replace)
+            # Parse date (expects YYYY-MM-DD)
             d_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            # 5. Combine
-            final_obj = d_obj.replace(hour=hh, minute=mm, second=0, microsecond=0)
-            return final_obj.isoformat()
+            return d_obj.replace(hour=hh, minute=mm, second=0, microsecond=0)
         except Exception:
             return None
+
+    def extract_times(self, date_str: str, time_str: str) -> tuple[Optional[datetime.datetime], Optional[datetime.datetime]]:
+        """Returns (start_dt, end_dt) from a date and a time string/title"""
+        if not date_str or not time_str: return None, None
+        try:
+            # Handle formats like "17:00 - 19:00" or "02:00 PM to 04:00 PM"
+            time_parts = re.split(r'-|to', time_str.lower())
+            start_txt = time_parts[0].strip()
+            end_txt = time_parts[1].strip() if len(time_parts) > 1 else None
+            
+            start_dt = self._parse_time_to_dt(date_str, start_txt)
+            end_dt = self._parse_time_to_dt(date_str, end_txt) if end_txt else None
+            
+            # If no end time, default to start + 2 hours for cleanup safety
+            if start_dt and not end_dt:
+                end_dt = start_dt + datetime.timedelta(hours=2)
+                
+            return start_dt, end_dt
+        except Exception:
+            return None, None
+
+    def make_iso_scheduled(self, date_str: str, time_str: str) -> Optional[str]:
+        """Combine date (YYYY-MM-DD) and time (HH:MM AM/PM) into ISO format"""
+        # We only use the START time for the official scheduledAt field
+        start_txt = time_str.split("-")[0].strip()
+        dt = self._parse_time_to_dt(date_str, start_txt)
+        return dt.isoformat() if dt else None
 
     async def scrape_pg_timetables(self) -> List[Dict[str, Any]]:
         """
@@ -2344,6 +2363,15 @@ puppeteer.use(StealthPlugin());
             if semester == "0" and title:
                 semester = self.extract_semester_logic(title)
                 item["semester"] = semester # Persist healed value
+            
+            # v75.1: Instant End-Time Filtering
+            # If this is a live class and it's scheduled for TODAY, check if it's already ended.
+            if is_class and item.get("date"):
+                now = datetime.datetime.now()
+                _, end_dt = self.extract_times(item["date"], item.get("class_time") or title)
+                if end_dt and end_dt < now:
+                    print(f"  [SYNC-SKIP]: Class already ended today -> {title}")
+                    continue
             
             # Ensure scheduledAt is set even if make_iso_scheduled failed (fallback to date only)
             if not item.get("scheduledAt") and item.get("date"):

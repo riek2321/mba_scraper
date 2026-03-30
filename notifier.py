@@ -100,14 +100,14 @@ class Notifier:
         resp = self._request_with_retry("PUT", url, json=payload, headers=headers)
         return resp is not None and resp.status_code == 200
 
-    def delete_from_website(self, semester, item_id):
-        url = f"{self.website_api_url}/api/sol/notifications/{semester}/{item_id}"
+    def delete_from_website(self, semester, item_id, category='notifications'):
+        url = f"{self.website_api_url}/api/sol/{category}/{semester}/{item_id}"
         headers = {"x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("DELETE", url, headers=headers)
         return resp is not None and resp.status_code in [200, 204]
 
-    def get_from_website(self, semester):
-        url = f"{self.website_api_url}/api/sol/notifications/{semester}"
+    def get_from_website(self, semester, category='notifications'):
+        url = f"{self.website_api_url}/api/sol/{category}/{semester}"
         resp = self._request_with_retry("GET", url)
         if resp and resp.status_code == 200:
             try:
