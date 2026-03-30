@@ -2509,7 +2509,7 @@ puppeteer.use(StealthPlugin());
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     SCRAPER_KEY = os.environ.get("SCRAPER_KEY", "")
-    BACKEND_URL = os.environ.get("BACKEND_URL", "https://solmates-backend.onrender.com")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://solmates-backend-w27e.onrender.com")
 
     async def standalone_run():
         mode = "all"
