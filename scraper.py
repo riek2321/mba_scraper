@@ -2339,11 +2339,11 @@ puppeteer.use(StealthPlugin());
             self.notices.extend(await self.run_class_chain())
 
         # v73.9: Nuclear Reset for Blacklisted links (RECOVERY MODE)
-        # We temporarily clear this because pichle bug ne saari valid links ko ban kar diya tha.
+        # Clear if blacklist is suspiciously large (bug filled it with valid links)
         if len(self.dismissed_links) > 50:
             print(f"[OMNI]: ⚠️ Blacklist too large ({len(self.dismissed_links)}). Clearing to recover lost data.")
             self.dismissed_links = set()
-            self._save_json(self.dismissed_links_file, list(self.dismissed_links))
+            self._save_json(self.dismissed_file, list(self.dismissed_links))
 
         # self.notices = [n for n in self.notices if str(n.get("link")) not in self.dismissed_links]
         return self.notices
