@@ -377,7 +377,8 @@ class MBAScraper:
             "https://sol.du.ac.in/home.php",
             "https://web.sol.du.ac.in/home",
             "https://sol.du.ac.in/all-notices.php",
-            "https://web.sol.du.ac.in/info/online-class-schedule"
+            "https://web.sol.du.ac.in/info/online-class-schedule",
+            "https://web.sol.du.ac.in/info/all-pg-class-time-table-sem-3-and-5"
         ]
         self.class_schedule_url = "https://web.sol.du.ac.in/my/team_schedules/vcs.php"
         self.parent_url = "https://web.sol.du.ac.in/info/online-class-schedule"
