@@ -2032,14 +2032,16 @@ puppeteer.use(StealthPlugin());
                     # If cell has "Join" or "Login" or is a direct Teams/vcs link
                     if "join" in txt or "login" in txt or "teams.microsoft" in h or "vcs.php" in h or "teams.microsoft" in cl or "vcs.php" in cl:
                         # Extract URL from href
-                        if h.startswith("http") and "javascript" not in h:
+                        if (h.startswith("http") or h.startswith("/")) and "javascript" not in h:
                             href = h
+                            if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
                             break
                         # Extract URL from onclick (click)
                         if cl:
-                            m_click = re.search(r"https?://[^\s'\"]+", cl)
+                            m_click = re.search(r"(?:https?://|/)[^\s'\"]+", cl)
                             if m_click:
                                 href = m_click.group(0)
+                                if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
                                 break
                 
                 # Ultimate fallback: first http link in the row if still pending
