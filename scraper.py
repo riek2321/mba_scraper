@@ -2000,8 +2000,10 @@ puppeteer.use(StealthPlugin());
 
     def _parse_raw_tables(self, tables: List[Any]) -> List[Dict[str, Any]]:
         results = []
+        total_rows_found = 0
         for table_data in tables:
             if not table_data: continue
+            total_rows_found += len(table_data)
             for row_data in table_data:
                 if not isinstance(row_data, dict): continue
                 cells = row_data.get("cells", [])
@@ -2010,10 +2012,31 @@ puppeteer.use(StealthPlugin());
                 row_html = str(row_data.get("html", "")).lower()
                 
                 # Course | Year/Sem | Subject | Medium | Class Time | Teacher Name | Login to Join
-                subj = cells[2]["text"]
-                sem_raw = cells[1]["text"]
-                current_date = cells[0]["text"]
-                time_txt = cells[4]["text"] if len(cells) > 4 else ""
+                subj = ""
+                time_txt = ""
+                sem_raw = ""
+                current_date = ""
+
+                # Flexible Detection: Iterate through cells to find values
+                for idx, c in enumerate(cells):
+                    txt = str(c.get("text", "")).strip()
+                    if not txt: continue
+                    
+                    if re.search(r"\d{1,2}[-/]\d{1,2}[-/]\d{4}", txt):
+                        current_date = txt
+                    elif re.search(r"SEM\s*[1-6]", txt.upper()):
+                        sem_raw = txt
+                    elif re.search(r"\d{1,2}:\d{2}", txt):
+                        time_txt = txt
+                    elif len(txt) > 5 and not subj and ":" not in txt:
+                        # Subject is usually the first long text that isn't time/date
+                        subj = txt
+
+                # Fallback to defaults if flexible detection failed
+                if not subj and len(cells) > 2: subj = cells[2]["text"]
+                if not sem_raw and len(cells) > 1: sem_raw = cells[1]["text"]
+                if not current_date: current_date = cells[0]["text"]
+                if not time_txt and len(cells) > 4: time_txt = cells[4]["text"]
 
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
@@ -2063,6 +2086,7 @@ puppeteer.use(StealthPlugin());
                     "scheduledAt": iso_scheduled,
                     "description": f"MBA Live Class: {subj} at {time_txt}"
                 })
+        print(f"[OMNI]: 📊 Scanned {total_rows_found} rows, Found {len(results)} valid MBA classes.")
         return results
 
     async def _extract_frames(self, page: Any) -> List[Dict[str, Any]]:
@@ -2358,12 +2382,18 @@ puppeteer.use(StealthPlugin());
         clean_results = []
         for item in results:
             # Create a unique key based on title, date, AND link
-            u_key = f"{clean_subject(item.get('title'))}-{item.get('date')}-{item.get('link')}"
-            if u_key not in unique_check:
-                unique_check.add(u_key)
-                clean_results.append(item)
-            else:
+            link = item.get("link", "#pending")
+            u_key = f"{clean_subject(item.get('title'))}-{item.get('date')}-{link}"
+            
+            # ALLOW multiple placeholder links (#pending)
+            if link != "#pending" and u_key in unique_check:
                 print(f"  [SYNC-DEDUPE]: Skipping actual duplicate: {item.get('title')[:40]}")
+                continue
+            
+            unique_check.add(u_key)
+            clean_results.append(item)
+        
+        print(f"[SYNC]: Clean results (after deduplication): {len(clean_results)}")
         
         for item in clean_results:
             link = str(item.get("link", ""))
@@ -2503,16 +2533,15 @@ puppeteer.use(StealthPlugin());
         
         c_stats = {"dismissed": 0, "restored": 0}
         
-        # 1. Detect Manual DELETIONS (Synced before -> Now missing from backend)
-        for old_link in history:
-            old_link_str = str(old_link)
-            if old_link_str not in backend_links and old_link_str != "#pending":
-                # Check if it was in our RECENT scrape (meaning SOL still has it)
-                was_in_current_scrape = any(str(r.get("link")) == old_link_str for r in results)
-                if was_in_current_scrape and old_link_str not in self.dismissed_links:
-                    print(f"  [DISMISS]: Blacklisting link: {old_link_str}")
-                    self.dismissed_links.add(old_link_str)
-                    c_stats["dismissed"] = c_stats["dismissed"] + 1
+        # Disable automatic blacklisting for now to prevent "Joining Session" links from being accidentally banned
+        # for old_link in history:
+        #     old_link_str = str(old_link)
+        #     if old_link_str not in backend_links and old_link_str != "#pending":
+        #         was_in_current_scrape = any(str(r.get("link")) == old_link_str for r in results)
+        #         if was_in_current_scrape and old_link_str not in self.dismissed_links:
+        #             print(f"  [DISMISS]: Blacklisting link: {old_link_str}")
+        #             self.dismissed_links.add(old_link_str)
+        #             c_stats["dismissed"] = c_stats["dismissed"] + 1
         
         # 2. Detect Manual RESTORES (Blacklisted link -> Now present in backend)
         # If an admin manually adds it back, remove it from the blacklist.
