@@ -2083,7 +2083,9 @@ puppeteer.use(StealthPlugin());
             return "3"
         if "4TH" in t or "FOURTH" in t:
             return "4"
-        roman = {"I": "1", "II": "2", "III": "3", "IV": "4"}
+        if "5TH" in t or "FIFTH" in t:
+            return "5"
+        roman = {"I": "1", "II": "2", "III": "3", "IV": "4", "V": "5"}
         m = re.search(r"(?:SEM(?:ESTER)?|YEAR|YR|PART|TERM)\s*(IV|III|II|I|[1-4])\b", t)
         if m:
             return roman.get(m.group(1), m.group(1))
