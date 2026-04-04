@@ -2355,7 +2355,17 @@ puppeteer.use(StealthPlugin());
             return text.strip().lower()
 
         unique_check = set()
+        clean_results = []
         for item in results:
+            # Create a unique key based on title (normalized) and date
+            u_key = f"{clean_subject(item.get('title'))}-{item.get('date')}-{item.get('class_time')}"
+            if u_key not in unique_check:
+                unique_check.add(u_key)
+                clean_results.append(item)
+            else:
+                print(f"  [SYNC-DEDUPE]: Skipping duplicate: {item.get('title')[:40]}")
+        
+        for item in clean_results:
             link = str(item.get("link", ""))
             title = str(item.get("title", ""))
             l_title = title.lower()
@@ -2443,18 +2453,19 @@ puppeteer.use(StealthPlugin());
                 if category == "notifications" and not is_termux_env:
                     existing_notifs = notifier.get_from_website(semester)
                     if existing_notifs:
-                        # Extract items that look like live classes from the current feed
-                        existing_classes_in_feed = [
+                        # Extract items that look like live classes or timetables from current feed
+                        existing_protected_items = [
                             n for n in existing_notifs 
                             if (n.get("description") and "MBA Live Class" in n["description"]) or 
-                               (n.get("link") and ("teams.microsoft" in n["link"] or "vcs.php" in n["link"]))
+                               (n.get("link") and ("teams.microsoft" in n["link"] or "vcs.php" in n["link"])) or
+                               (n.get("title") and "[Timetable]" in n["title"])
                         ]
-                        if existing_classes_in_feed:
-                            print(f"  [GUARD]: Preserving {len(existing_classes_in_feed)} live classes in Sem {semester} notices feed.")
+                        if existing_protected_items:
+                            print(f"  [GUARD]: Preserving {len(existing_protected_items)} classes/timetables in Sem {semester} notices feed.")
                             # Merge them into our sync list (avoid duplicates)
-                            for ec in existing_classes_in_feed:
-                                if not any(str(n.get("link")) == str(ec.get("link")) for n in items):
-                                    items.append(ec)
+                            for ep in existing_protected_items:
+                                if not any(str(n.get("link")) == str(ep.get("link")) for n in items):
+                                    items.append(ep)
                 
                 # CRITICAL: Prevent wiping out live-classes it didn't scrape!
                 current_allow_deletions = allow_deletions
