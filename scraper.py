@@ -2244,7 +2244,7 @@ puppeteer.use(StealthPlugin());
                 
                 # Standard pattern to avoid lint errors with run_in_executor
                 def _do_get(u, h):
-                    return requests.get(u, headers=h, timeout=20).json()
+                    return requests.get(u, headers=h, timeout=20, verify=False).json()
                 
                 nodes = await loop.run_in_executor(None, _do_get, url, {"User-Agent": self.user_agent})
                 if not isinstance(nodes, list):
@@ -2257,15 +2257,22 @@ puppeteer.use(StealthPlugin());
                     if "MBA" not in text.upper() or node.get("type") != "file":
                         continue
                         
-                    # Extract Dates: "Dated 23.03.2026 to 28.03.2026" or "Dated 26.03.2026"
-                    date_match = re.search(r"Dated\s+(\d{2}\.\d{2}\.\d{4})(?:\s+to\s+(\d{2}\.\d{2}\.\d{4}))?", text, re.I)
+                    # Extract Dates: "Dated 23.03.2026 to 28.03.2026" or "Dated 26.03.2026" or just "05.04.2026"
+                    date_match = re.search(r"(?:Dated\s+)?(\d{2}\.\d{2}\.\d{4})(?:\s+to\s+(\d{2}\.\d{2}\.\d{4}))?", text, re.I)
+                    if not date_match:
+                        # Fallback: check for DD-MM-YYYY or any 8-10 digit date pattern
+                        date_match = re.search(r"(\d{2}[-./]\d{2}[-./]\d{2,4})", text)
+                        
                     if not date_match:
                         # Non-dated schedules (fallback to today or created_at)
                         start_str = today.strftime("%d.%m.%Y")
                         end_str = start_str
                     else:
-                        start_str = date_match.group(1)
-                        end_str = date_match.group(2) or start_str
+                        start_str = date_match.group(1).replace('-', '.').replace('/', '.')
+                        try:
+                            end_str = date_match.group(2).replace('-', '.').replace('/', '.') if date_match.group(2) else start_str
+                        except IndexError:
+                            end_str = start_str
                     
                     try:
                         end_date = datetime.datetime.strptime(end_str, "%d.%m.%Y")
