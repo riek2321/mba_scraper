@@ -2512,6 +2512,12 @@ puppeteer.use(StealthPlugin());
                         print(f"[SYNC]: 🛡️ Skipping {category} SEM {semester} (empty, non-Termux).")
                         continue
 
+                # v75.7: MODAL PROTECTION
+                # If we are only syncing classes, we MUST NOT delete regular notifications.
+                if category == "notifications" and getattr(self, "target_mode", "all") == "classes":
+                    sync_deletions = False
+                    print(f"  [GUARD]: Classes-only mode detected. Disabling deletions for NOTIFICATIONS.")
+
                 if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=sync_deletions):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
