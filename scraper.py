@@ -2029,8 +2029,8 @@ puppeteer.use(StealthPlugin());
                     h = str(c.get("href", "") or "")
                     cl = str(c.get("click", "") or "")
                     
-                    # If cell has "Join" or "Login" or is a direct Teams/vcs link
                     if "join" in txt or "login" in txt or "teams.microsoft" in h or "vcs.php" in h or "teams.microsoft" in cl or "vcs.php" in cl:
+                        print(f"  [DEBUG]: JOIN/LOGIN Cell text='{txt}' link='{h}' click='{cl[:50]}...'")
                         # Extract URL from href
                         if (h.startswith("http") or h.startswith("/")) and "javascript" not in h:
                             href = h
@@ -2044,9 +2044,8 @@ puppeteer.use(StealthPlugin());
                                 if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
                                 break
                 
-                # Ultimate fallback: first http link in the row if still pending
                 if href == "#pending":
-                    href = next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http") and "javascript" not in str(c["href"])), "#pending")
+                    print(f"  [DEBUG-WARN]: No link found for row '{subj}' among {len(cells)} cells")
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
