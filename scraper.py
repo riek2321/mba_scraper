@@ -2338,13 +2338,14 @@ puppeteer.use(StealthPlugin());
             print("[OMNI]: CLASS SCHEDULE ONLY scan")
             self.notices.extend(await self.run_class_chain())
 
-        # v73.9: Filter out blacklisted links (Manually Dismissed items)
-        if self.dismissed_links:
-            pre_count = len(self.notices)
-            self.notices = [n for n in self.notices if str(n.get("link")) not in self.dismissed_links]
-            if len(self.notices) < pre_count:
-                print(f"[OMNI]: 🛡️ Filtered {pre_count - len(self.notices)} blacklisted (manually deleted) items.")
+        # v73.9: Nuclear Reset for Blacklisted links (RECOVERY MODE)
+        # We temporarily clear this because pichle bug ne saari valid links ko ban kar diya tha.
+        if len(self.dismissed_links) > 50:
+            print(f"[OMNI]: ⚠️ Blacklist too large ({len(self.dismissed_links)}). Clearing to recover lost data.")
+            self.dismissed_links = set()
+            self._save_json(self.dismissed_links_file, list(self.dismissed_links))
 
+        # self.notices = [n for n in self.notices if str(n.get("link")) not in self.dismissed_links]
         return self.notices
 
     # ═══════════════════════════════════════════
@@ -2462,8 +2463,9 @@ puppeteer.use(StealthPlugin());
         stats = {"groups_synced": 0, "failed": 0, "deleted": 0}
         
         # Ensure all targeted semesters (0-4) are refreshed to purge stale data
-        # Safety check: Only proceed if we found at least 2 items (scan likely successful)
-        if len(results) < 2:
+        # Safety check: Force sync if we are in Termux or have enough data
+        is_termux_env = os.environ.get("IS_TERMUX", "false").lower() == "true"
+        if len(results) < 2 and not is_termux_env:
             print("[SYNC]: Insufficient data found. Skipping sync to prevent accidental wipe.")
             return
 
