@@ -2076,7 +2076,7 @@ puppeteer.use(StealthPlugin());
                             Array.from(tr.querySelectorAll('td,th')).map(c => ({
                                 text: c.innerText.trim(),
                                 href: (c.querySelector('a') || {}).href || null,
-                                click: (c.querySelector('a') || {}).onclick ? (c.querySelector('a') || {}).onclick.toString() : (c.getAttribute('onclick') || null)
+                                click: (c.querySelector('a') ? c.querySelector('a').getAttribute('onclick') : null) || (c.getAttribute('onclick') || null)
                             }))
                         )
                     )
@@ -2412,8 +2412,9 @@ puppeteer.use(StealthPlugin());
                     groups["live-classes"][semester] = []
                 groups["live-classes"][semester].append(item)
                 
-                # Classes also appear in notifications feed
+                # Classes also appear in notifications feed (FORCE SYNC)
                 groups["notifications"][semester].append(item)
+                print(f"  [SYNC-DEBUG]: Adding {title[:30]} to NOTIFS group (Total: {len(groups['notifications'][semester])})")
             else:
                 # Regular notices only in notifications
                 groups["notifications"][semester].append(item)
