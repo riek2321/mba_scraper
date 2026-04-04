@@ -470,13 +470,6 @@ class MBAScraper:
                 r = session.get(url, headers=h, timeout=30)
                 print(f"[M01][CFFI][{fp}]: {r.status_code}")
                 if r.status_code == 200:
-                    # Case A: Notifications older than 30 days OR generic clutter
-                    if sem == "0" and category == "notifications":
-                        # Purge if older than 30 days OR contains generic study material/merit list keywords
-                        is_clutter = any(bad in str(item.get("title", "")).lower() for bad in ["study material", "syllabus", "course structure", "merit list", "list of candidates"])
-                        if item_date < thirty_ago or is_clutter:
-                            to_delete = True
-                            if is_clutter: print(f"  [CLEANUP]: Purging Sem 0 Clutter -> {item.get('title')}")
                     return r.text
             except Exception as e:
                 print(f"[M01][CFFI][{fp}]: {e}")
@@ -1940,9 +1933,9 @@ puppeteer.use(StealthPlugin());
         for a in soup.find_all("a", href=True):
             txt = a.get_text().strip()
             if txt and any(kw.lower() in txt.lower() for kw in self.keywords): 
-                # v75.4: Filter out generic study materials/syllabus/merit lists from notifications
-                if any(bad in txt.lower() for bad in ["study material", "syllabus", "course structure", "merit list", "list of candidates"]):
-                    continue
+                # v75.4: UNBLOCKED - Allowing all MBA updates
+                # if any(bad in txt.lower() for bad in ["study material", "syllabus", "course structure", "merit list", "list of candidates"]):
+                #     continue
                 abs_link = urljoin(self.current_url, a["href"]) # pyre-ignore[16]
                 if abs_link not in seen:
                     seen.add(abs_link)
@@ -2030,8 +2023,8 @@ puppeteer.use(StealthPlugin());
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
                 href = next(
-                    (str(c["href"]) for c in reversed(cells) if c.get("href") and "teams.microsoft" in str(c["href"])),
-                    "#pending"
+                    (str(c["href"]) for c in reversed(cells) if c.get("href") and ("teams.microsoft" in str(c["href"]) or "vcs.php" in str(c["href"]))),
+                    next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http")), "#pending")
                 )
                 
                 # Standardize current_date and parse
@@ -2181,8 +2174,11 @@ puppeteer.use(StealthPlugin());
         cdn_base = "https://web.sol.du.ac.in/my_modules/type/PG_TT_SESSION_25_26_SEM2_SEM_4/data/root/"
         
         folders = [
+            ("1", "PG-TT-SEM-I-CLASS_"),
             ("2", "PG-TT-SEM-II-CLASS_"),
-            ("4", "PG-TT-SEM-IV-CLASS_")
+            ("3", "PG-TT-SEM-III-CLASS_"),
+            ("4", "PG-TT-SEM-IV-CLASS_"),
+            ("5", "PG-TT-SEM-V-CLASS_")
         ]
         
         results = []
