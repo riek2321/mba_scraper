@@ -2437,9 +2437,26 @@ puppeteer.use(StealthPlugin());
             for semester in target_semesters:
                 items = groups[category].get(semester, []) # type: ignore
                 
-                # CRITICAL: Prevent GitHub from wiping out live-classes it didn't scrape!
-                # If we are syncing "live-classes" but we didn't scrape them (not Termux),
-                # NEVER allow deletions during bulk sync.
+                # v75.3: PROTECTION GUARD for Termux & Render Sync
+                # If we are syncing "notifications" but we are NOT in Termux,
+                # we must preserve any existing "live-classes" that were already in the notifications feed.
+                if category == "notifications" and not is_termux_env:
+                    existing_notifs = notifier.get_from_website(semester)
+                    if existing_notifs:
+                        # Extract items that look like live classes from the current feed
+                        existing_classes_in_feed = [
+                            n for n in existing_notifs 
+                            if (n.get("description") and "MBA Live Class" in n["description"]) or 
+                               (n.get("link") and ("teams.microsoft" in n["link"] or "vcs.php" in n["link"]))
+                        ]
+                        if existing_classes_in_feed:
+                            print(f"  [GUARD]: Preserving {len(existing_classes_in_feed)} live classes in Sem {semester} notices feed.")
+                            # Merge them into our sync list (avoid duplicates)
+                            for ec in existing_classes_in_feed:
+                                if not any(str(n.get("link")) == str(ec.get("link")) for n in items):
+                                    items.append(ec)
+                
+                # CRITICAL: Prevent wiping out live-classes it didn't scrape!
                 current_allow_deletions = allow_deletions
                 if category == "live-classes" and not is_termux_env:
                     current_allow_deletions = False
