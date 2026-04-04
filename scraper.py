@@ -1718,126 +1718,140 @@ puppeteer.use(StealthPlugin());
     # ═══════════════════════════════════════════
     async def run_class_chain(self) -> List[Dict[str, Any]]:
         print("\n[OMNI]: ═══ CLASS SCHEDULE CHAIN — 42 Methods ═══")
-        url = self.class_schedule_url
-        self.current_url = url
-
-        # ── Fast HTTP methods (no browser) ──
-        fast_methods = [
-            ("M01-CFFI",           lambda: self.m01_cffi(url)),
-            ("M02-TLS-CLIENT",     lambda: self.m02_tls_client(url)),
-            ("M03-HTTPX-H2",       lambda: self.m03_httpx(url)),
-            ("M04-CLOUDSCRAPER",   lambda: self.m04_cloudscraper(url)),
-            ("M05-COOKIES",        lambda: self.m05_manual_cookies(url)),
-            ("M06-WAYBACK",        lambda: self.m06_wayback(url)),
-            ("M07-CDX",            lambda: self.m07_cdx(url)),
-            ("M08-GCACHE",         lambda: self.m08_google_cache(url)),
-            ("M09-BING-CACHE",     lambda: self.m09_bing_cache(url)),
-            ("M10-YANDEX",         lambda: self.m10_yandex_cache(url)),
-            ("M11-COMMONCRAWL",    lambda: self.m11_commoncrawl(url)),
-            ("M12-CACHEDVIEW",     lambda: self.m12_cachedview(url)),
-            ("M13-CF-WORKER",      lambda: self.m13_cf_worker(url)),
-            ("M14-VERCEL",         lambda: self.m14_vercel(url)),
-            ("M15-NETLIFY",        lambda: self.m15_netlify(url)),
-            ("M16-TOR",            lambda: self.m16_tor(url)),
-            ("M17-I2P",            lambda: self.m17_i2p(url)),
-            ("M18-FREEPROXY",      lambda: self.m18_freeproxy(url)),
-            ("M19-IPv6",           lambda: self.m19_ipv6(url)),
-            ("M20-DoH",            lambda: self.m20_doh(url)),
-            ("M21-TIMING-JITTER",  lambda: self.m21_timing_jitter(url)),
-            ("M22-CURL-IMPERSONATE", lambda: self.m22_curl_impersonate(url)),
-            ("M24-SCRAPERАNT",     lambda: self.m24_scraperант(url)),
-            ("M25-WSAI",           lambda: self.m25_wsai(url)),
-            ("M23-SCRAPERAPI",     lambda: self.m23_scraperapi(url)),
-            ("M41-AWSALB-FORGE",   lambda: self.m41_awsalb_forge(url)),
+        urls = [
+            self.class_schedule_url,
+            "https://web.sol.du.ac.in/info/all-pg-class-time-table-sem-3-and-5"
         ]
+        all_results = []
+        
+        for url in urls:
+            self.current_url = url
+            print(f"\n[CHAIN]: 🔍 Scanning {url}")
+            url_success = False
 
-        for name, fn in fast_methods:
-            print(f"\n[CHAIN]: ── {name} ──")
+            # ── Fast HTTP methods (no browser) ──
+            fast_methods = [
+                ("M01-CFFI",           lambda: self.m01_cffi(url)),
+                ("M02-TLS-CLIENT",     lambda: self.m02_tls_client(url)),
+                ("M03-HTTPX-H2",       lambda: self.m03_httpx(url)),
+                ("M04-CLOUDSCRAPER",   lambda: self.m04_cloudscraper(url)),
+                ("M05-COOKIES",        lambda: self.m05_manual_cookies(url)),
+                ("M06-WAYBACK",        lambda: self.m06_wayback(url)),
+                ("M07-CDX",            lambda: self.m07_cdx(url)),
+                ("M08-GCACHE",         lambda: self.m08_google_cache(url)),
+                ("M09-BING-CACHE",     lambda: self.m09_bing_cache(url)),
+                ("M10-YANDEX",         lambda: self.m10_yandex_cache(url)),
+                ("M11-COMMONCRAWL",    lambda: self.m11_commoncrawl(url)),
+                ("M12-CACHEDVIEW",     lambda: self.m12_cachedview(url)),
+                ("M13-CF-WORKER",      lambda: self.m13_cf_worker(url)),
+                ("M14-VERCEL",         lambda: self.m14_vercel(url)),
+                ("M15-NETLIFY",        lambda: self.m15_netlify(url)),
+                ("M16-TOR",            lambda: self.m16_tor(url)),
+                ("M17-I2P",            lambda: self.m17_i2p(url)),
+                ("M18-FREEPROXY",      lambda: self.m18_freeproxy(url)),
+                ("M19-IPv6",           lambda: self.m19_ipv6(url)),
+                ("M20-DoH",            lambda: self.m20_doh(url)),
+                ("M21-TIMING-JITTER",  lambda: self.m21_timing_jitter(url)),
+                ("M22-CURL-IMPERSONATE", lambda: self.m22_curl_impersonate(url)),
+                ("M24-SCRAPERАNT",     lambda: self.m24_scraperант(url)),
+                ("M25-WSAI",           lambda: self.m25_wsai(url)),
+                ("M23-SCRAPERAPI",     lambda: self.m23_scraperapi(url)),
+                ("M41-AWSALB-FORGE",   lambda: self.m41_awsalb_forge(url)),
+            ]
+
+            for name, fn in fast_methods:
+                print(f"  [CHAIN]: ── {name} ──")
+                try:
+                    html = await fn()
+                    if html and self._is_valid(html): # type: ignore
+                        res = self._parse_html(html)
+                        if res:
+                            print(f"  [CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
+                            all_results.extend(res)
+                            url_success = True
+                            break
+                except Exception as e:
+                    print(f"  [CHAIN]: {name} crashed — {e}")
+
+            if url_success: continue
+
+            # ── Playwright Chromium ──
+            print(f"  [CHAIN]: ── Launching Playwright Chromium for {url} ──")
             try:
-                html = await fn()
-                if html and self._is_valid(html): # type: ignore
-                    self.current_url = url
-                    res = self._parse_html(html)
-                    if res:
-                        print(f"[CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
-                        return res
-                    print(f"[CHAIN]: {name} got HTML but no classes parsed")
+                async with async_playwright() as p:
+                    is_mobile = random.choice([True, False])
+                    ua = random.choice(self.mobile_agents if is_mobile else self.user_agents)
+                    browser = await p.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-dev-shm-usage",
+                              "--disable-blink-features=AutomationControlled"]
+                    )
+                    context = await browser.new_context(
+                        user_agent=ua,
+                        viewport={"width": 390, "height": 844} if is_mobile
+                        else {"width": 1366, "height": 768},
+                        is_mobile=is_mobile, has_touch=is_mobile,
+                        locale="en-IN", timezone_id="Asia/Kolkata",
+                    )
+                    await context.add_init_script(HumanBot.js_mask_script())
+
+                    browser_methods = [
+                        ("M26-PW-GHOST",  lambda: self.m26_pw_ghost(url, context)),
+                        ("M27-PW-HUMAN",  lambda: self.m27_pw_human(url, context)),
+                        ("M40-CSRF",      lambda: self.m40_csrf_cookies(url, context)),
+                        ("M42-3G-EMUL",   lambda: self.m42_3g_emulation(url, context)),
+                    ]
+                    for name, fn in browser_methods:
+                        print(f"    [CHAIN]: ── {name} ──")
+                        try:
+                            html = await fn()
+                            if html and self._is_valid(html): # pyre-ignore[16]
+                                res = self._parse_html(html) # pyre-ignore[16]
+                                if res:
+                                    print(f"    [CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
+                                    all_results.extend(res)
+                                    url_success = True
+                                    break
+                        except Exception as e:
+                            print(f"    [CHAIN]: {name} crashed — {e}")
+                    await browser.close()
             except Exception as e:
-                print(f"[CHAIN]: {name} crashed — {e}")
-
-        # ── Playwright Chromium ──
-        print("\n[CHAIN]: ── Launching Playwright Chromium ──")
-        try:
-            async with async_playwright() as p:
-                is_mobile = random.choice([True, False])
-                ua = random.choice(self.mobile_agents if is_mobile else self.user_agents)
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=["--no-sandbox", "--disable-dev-shm-usage",
-                          "--disable-blink-features=AutomationControlled"]
-                )
-                context = await browser.new_context(
-                    user_agent=ua,
-                    viewport={"width": 390, "height": 844} if is_mobile
-                    else {"width": 1366, "height": 768},
-                    is_mobile=is_mobile, has_touch=is_mobile,
-                    locale="en-IN", timezone_id="Asia/Kolkata",
-                )
-                await context.add_init_script(HumanBot.js_mask_script())
-
-                browser_methods = [
-                    ("M26-PW-GHOST",  lambda: self.m26_pw_ghost(url, context)),
-                    ("M27-PW-HUMAN",  lambda: self.m27_pw_human(url, context)),
-                    ("M40-CSRF",      lambda: self.m40_csrf_cookies(url, context)),
-                    ("M42-3G-EMUL",   lambda: self.m42_3g_emulation(url, context)),
-                ]
-                for name, fn in browser_methods:
-                    print(f"\n[CHAIN]: ── {name} ──")
-                    try:
-                        html = await fn()
-                        if html and self._is_valid(html): # pyre-ignore[16]
-                            self.current_url = url # pyre-ignore[16]
-                            res = self._parse_html(html) # pyre-ignore[16]
-                            if res:
-                                print(f"[CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
-                                await browser.close()
-                                return res
-                    except Exception as e:
-                        print(f"[CHAIN]: {name} crashed — {e}")
-                await browser.close()
-        except Exception as e:
-            print(f"[CHAIN]: Chromium launch failed — {e}")
+                print(f"  [CHAIN]: Browser Manager failed — {e}")
 
         # ── Specialized browsers ──
-        specialized = [
-            ("M28-PATCHRIGHT",    lambda: self.m28_patchright(url)),
-            ("M29-NODRIVER",      lambda: self.m29_nodriver(url)),
-            ("M30-CAMOUFOX",      lambda: self.m30_camoufox(url)),
-            ("M31-SELENIUMBASE",  lambda: self.m31_seleniumbase(url)),
-            ("M32-UCD",           lambda: self.m32_ucd(url)),
-            ("M33-DRISSIONPAGE",  lambda: self.m33_drissionpage(url)),
-            ("M34-PYDOLL",        lambda: self.m34_pydoll(url)),
-            ("M35-SCRAPLING",     lambda: self.m35_scrapling(url)),
-            ("M36-BOTASAURUS",    lambda: self.m36_botasaurus(url)),
-            ("M37-SELENIUM-WIRE", lambda: self.m37_selenium_wire(url)),
-            ("M38-PUPPETEER",     lambda: self.m38_puppeteer(url)),
-            ("M39-PYCHROME",      lambda: self.m39_pychrome(url)),
-        ]
-        for name, fn in specialized:
-            print(f"\n[CHAIN]: ── {name} ──")
-            try:
-                html = await fn()
-                if html and self._is_valid(html): # type: ignore
-                    self.current_url = url
-                    res = self._parse_html(html) # pyre-ignore[16]
-                    if res:
-                        print(f"[CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
-                        return res
-            except Exception as e:
-                print(f"[CHAIN]: {name} crashed — {e}")
+        if not all_results:
+            print("\n[CHAIN]: ── Specialized Browsers Fallback ──")
+            # (Just doing first URL for specialized to save time unless all failed)
+            url = urls[0] 
+            specialized = [
+                ("M28-PATCHRIGHT",    lambda: self.m28_patchright(url)),
+                ("M29-NODRIVER",      lambda: self.m29_nodriver(url)),
+                ("M30-CAMOUFOX",      lambda: self.m30_camoufox(url)),
+                ("M31-SELENIUMBASE",  lambda: self.m31_seleniumbase(url)),
+                ("M32-UCD",           lambda: self.m32_ucd(url)),
+                ("M33-DRISSIONPAGE",  lambda: self.m33_drissionpage(url)),
+                ("M34-PYDOLL",        lambda: self.m34_pydoll(url)),
+                ("M35-SCRAPLING",     lambda: self.m35_scrapling(url)),
+                ("M36-BOTASAURUS",    lambda: self.m36_botasaurus(url)),
+                ("M37-SELENIUM-WIRE", lambda: self.m37_selenium_wire(url)),
+                ("M38-PUPPETEER",     lambda: self.m38_puppeteer(url)),
+                ("M39-PYCHROME",      lambda: self.m39_pychrome(url)),
+            ]
+            for name, fn in specialized:
+                print(f"  [CHAIN]: ── {name} ──")
+                try:
+                    html = await fn()
+                    if html and self._is_valid(html):
+                        res = self._parse_html(html)
+                        if res:
+                            print(f"  [CHAIN]: ✅ {name} SUCCESS — {len(res)} classes!")
+                            all_results.extend(res)
+                            break
+                except Exception as e:
+                    print(f"  [CHAIN]: {name} crashed — {e}")
 
-        print("\n[CHAIN]: ❌ All 42 methods exhausted for class schedule.")
-        return []
+        return all_results
+
 
     # ═══════════════════════════════════════════
     # PARSING
@@ -1986,70 +2000,55 @@ puppeteer.use(StealthPlugin());
 
     def _parse_raw_tables(self, tables: List[Any]) -> List[Dict[str, Any]]:
         results = []
-        for rows in tables:
-            current_date = None
-            for cells_raw in rows:
-                cells = list(cells_raw)
-                combined = " ".join(str(c.get("text", "")) for c in cells)
-                if "date:" in combined.lower():
-                    m = re.search(r"(\d{1,2}[-/]\d{2}[-/]\d{4})", combined)
-                    if m:
-                        current_date = m.group(1)
-                        continue
-                if not current_date or len(cells) < 4:
-                    continue
+        for table_data in tables:
+            if not table_data: continue
+            for row_data in table_data:
+                if not isinstance(row_data, dict): continue
+                cells = row_data.get("cells", [])
+                if len(cells) < 4: continue
                 
-                # Robust extraction: find subject and time by content instead of index
-                subj = ""
-                time_txt = ""
-                sem_raw = ""
+                row_html = str(row_data.get("html", "")).lower()
                 
-                # Sem/Year is usually cells[1]
-                if len(cells) > 1: sem_raw = str(cells[1].get("text", "")).strip()
-                
-                for idx, c in enumerate(cells):
-                    txt = str(c.get("text", "")).strip()
-                    # Subject is usually cells[2] or similar, but avoid the time cell
-                    if idx == 2 or (idx < 4 and not subj and len(txt) > 5 and ":" not in txt):
-                        subj = txt
-                    # Time pattern detection (24h or 12h)
-                    if re.search(r"\d{1,2}:\d{2}", txt):
-                        time_txt = txt
-                
-                if not any(kw.lower() in combined.lower() for kw in self.keywords):
-                    continue
-                
+                # Course | Year/Sem | Subject | Medium | Class Time | Teacher Name | Login to Join
+                subj = cells[2]["text"]
+                sem_raw = cells[1]["text"]
+                current_date = cells[0]["text"]
+                time_txt = cells[4]["text"] if len(cells) > 4 else ""
+
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
-                # Determine link: Super Aggressive - Look for ANY URL in the last 3 cells (Join button column)
+                # Determine link: NUCLEAR OPTION - Scan raw row HTML for any URL pattern
                 href = "#pending"
-                # Check last 3 cells (usually Login is 7th, Teacher is 6th, etc)
-                for c in reversed(cells[-3:]):
-                    h = str(c.get("href", "") or "")
-                    cl = str(c.get("click", "") or "")
-                    
-                    # Target href or onclick
-                    target = h if (h and "javascript" not in h) else cl
-                    if target:
-                        m_url = re.search(r"(?:https?://|/)[^\s'\"]+", target)
-                        if m_url:
-                            href = m_url.group(0)
-                            if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
-                            print(f"  [DEBUG-SUCCESS]: Extracted link for '{subj}': {href}")
-                            break
+                
+                # Look for Teams or VCS links specifically in the whole row HTML
+                m_teams = re.search(r'https://teams\.microsoft\.com/[^\s\'"]+', row_html)
+                m_vcs = re.search(r'https?://[^\s\'"]+vcs\.php[^\s\'"]+', row_html)
+                m_rel = re.search(r'/(?:my|info)/[^\s\'"]+', row_html)
+                
+                if m_teams: href = m_teams.group(0)
+                elif m_vcs: href = m_vcs.group(0)
+                elif m_rel: 
+                    href = m_rel.group(0)
+                    if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
                 
                 if href == "#pending":
-                    # Ultimate fallback: check ALL cells in row for any link
+                    # Fallback to Cell-by-cell extraction
                     for c in reversed(cells):
                         h = str(c.get("href", "") or "")
-                        if h.startswith("http") and "javascript" not in h:
-                            href = h
-                            break
-                        if href != "#pending": break
+                        cl = str(c.get("click", "") or "")
+                        target = h if (h and "javascript" not in h) else cl
+                        if target:
+                            m_url = re.search(r"(?:https?://|/)[^\s'\"]+", target)
+                            if m_url:
+                                href = m_url.group(0)
+                                if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
+                                break
                 
-                if href == "#pending":
-                    print(f"  [DEBUG-WARN]: Still no link found for '{subj}'. Cells: {[c.get('text') for c in cells]}")
+                if href != "#pending":
+                    print(f"  [DEBUG-SUCCESS]: Found link for '{subj}': {href[:60]}...")
+                else:
+                    print(f"  [DEBUG-WARN]: Still no link found for '{subj}'.")
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
@@ -2070,17 +2069,18 @@ puppeteer.use(StealthPlugin());
         all_raw = []
         for ctx in [page] + list(page.frames):
             try:
-                data = await ctx.evaluate("""() =>
-                    Array.from(document.querySelectorAll('table')).map(t =>
-                        Array.from(t.querySelectorAll('tr')).map(tr =>
-                            Array.from(tr.querySelectorAll('td,th')).map(c => ({
+                data = await ctx.evaluate("""() => {
+                    return Array.from(document.querySelectorAll('table')).map(t => {
+                        return Array.from(t.querySelectorAll('tr')).map(tr => ({
+                            cells: Array.from(tr.querySelectorAll('td,th')).map(c => ({
                                 text: c.innerText.trim(),
                                 href: (c.querySelector('a') || {}).href || null,
                                 click: (c.querySelector('a') ? c.querySelector('a').getAttribute('onclick') : null) || (c.getAttribute('onclick') || null)
-                            }))
-                        )
-                    )
-                """)
+                            })),
+                            html: tr.innerHTML
+                        }));
+                    });
+                }""")
                 if data:
                     all_raw.extend(data)
             except Exception:
@@ -2357,13 +2357,13 @@ puppeteer.use(StealthPlugin());
         unique_check = set()
         clean_results = []
         for item in results:
-            # Create a unique key based on title (normalized) and date
-            u_key = f"{clean_subject(item.get('title'))}-{item.get('date')}-{item.get('class_time')}"
+            # Create a unique key based on title, date, AND link
+            u_key = f"{clean_subject(item.get('title'))}-{item.get('date')}-{item.get('link')}"
             if u_key not in unique_check:
                 unique_check.add(u_key)
                 clean_results.append(item)
             else:
-                print(f"  [SYNC-DEDUPE]: Skipping duplicate: {item.get('title')[:40]}")
+                print(f"  [SYNC-DEDUPE]: Skipping actual duplicate: {item.get('title')[:40]}")
         
         for item in clean_results:
             link = str(item.get("link", ""))
@@ -2399,9 +2399,8 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(title)
                 item["semester"] = semester # Persist healed value
             
-            # v75.1: Instant End-Time Filtering
-            # If this is a live class and it's scheduled for TODAY, check if it's already ended.
-            if is_class and item.get("date"):
+            # v75.1: Instant End-Time Filtering (Skip for Timetables)
+            if is_class and item.get("date") and "[Timetable]" not in title:
                 now = datetime.datetime.now()
                 _, end_dt = self.extract_times(item["date"], item.get("class_time") or title)
                 if end_dt and end_dt < now:
@@ -2472,8 +2471,13 @@ puppeteer.use(StealthPlugin());
                 if category == "live-classes" and not is_termux_env:
                     current_allow_deletions = False
                 
-                # v73.8: DELEGATION SAFETY GUARD
-                # If we have no items and we aren't allowing deletions, it means 
+                # v75.4: PARANOID SYNC PROTECTION
+                # Render/Notices scraper should NEVER allow deletions for semesters handled by Termux (1, 2, 3, 4).
+                if category == "notifications" and not is_termux_env and semester in ["1", "2", "3", "4"]:
+                    current_allow_deletions = False
+                    print(f"  [GUARD]: Disabling deletions for SEM {semester} to protect Termux classes.")
+                
+                # Safety check: If we have no items and we aren't allowing deletions, it means 
                 # this category/semester is likely delegated to another environment (Phone).
                 # Skip the sync entirely to preserve current data.
                 if not items and not current_allow_deletions:
