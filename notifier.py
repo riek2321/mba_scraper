@@ -145,13 +145,13 @@ class Notifier:
             try:
                 stats = resp.json().get('stats', {})
                 print(f"  [API][BULK]: Success | Added: {stats.get('added',0)}, Updated: {stats.get('updated',0)}, Deleted: {stats.get('deleted',0)}")
-                return True
+                return stats # Return full stats
             except Exception:
                 print(f"  [API][BULK]: Success (Status: {resp.status_code})")
-                return True
+                return {"success": True}
         else:
             print(f"  [API][BULK]: FAILED (No response)")
-            return False
+            return {"success": False, "error": "No Response"}
 
     def clear_blacklist(self):
         """Clears the backend's notification blacklist (sol_deleted_notifications)"""
