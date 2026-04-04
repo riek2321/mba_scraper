@@ -2022,10 +2022,20 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
-                href = next(
-                    (str(c["href"]) for c in reversed(cells) if c.get("href") and ("teams.microsoft" in str(c["href"]) or "vcs.php" in str(c["href"]))),
-                    next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http")), "#pending")
-                )
+                # Determine link: Prefer teams, then vcs.php, then any http URL in href, then regex from onclick
+                cell_h = next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http") and "javascript" not in str(c["href"])), "#pending")
+                cell_c = next((str(c["click"]) for c in reversed(cells) if c.get("click")), "")
+                
+                href = cell_h
+                if href == "#pending" and cell_c:
+                    # Regex for window.open('...') or similar
+                    m_click = re.search(r"https?://[^\s'\"]+", cell_c)
+                    if m_click: href = m_click.group(0)
+                
+                # Priority refinement: if we found a vcs.php or teams link anywhere, take it
+                if "teams.microsoft" in cell_c or "vcs.php" in cell_c:
+                    m_prio = re.search(r"https?://[^\s'\"]+", cell_c)
+                    if m_prio: href = m_prio.group(0)
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
@@ -2051,7 +2061,8 @@ puppeteer.use(StealthPlugin());
                         Array.from(t.querySelectorAll('tr')).map(tr =>
                             Array.from(tr.querySelectorAll('td,th')).map(c => ({
                                 text: c.innerText.trim(),
-                                href: (c.querySelector('a') || {}).href || null
+                                href: (c.querySelector('a') || {}).href || null,
+                                click: (c.querySelector('a') || {}).onclick ? (c.querySelector('a') || {}).onclick.toString() : (c.getAttribute('onclick') || null)
                             }))
                         )
                     )
