@@ -2022,30 +2022,34 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
-                # Determine link: Prefer cells containing 'Join' or 'Login' as they carry the button.
+                # Determine link: Super Aggressive - Look for ANY URL in the last 3 cells (Join button column)
                 href = "#pending"
-                for c in reversed(cells):
-                    txt = str(c.get("text", "")).lower()
+                # Check last 3 cells (usually Login is 7th, Teacher is 6th, etc)
+                for c in reversed(cells[-3:]):
                     h = str(c.get("href", "") or "")
                     cl = str(c.get("click", "") or "")
                     
-                    if "join" in txt or "login" in txt or "teams.microsoft" in h or "vcs.php" in h or "teams.microsoft" in cl or "vcs.php" in cl:
-                        print(f"  [DEBUG]: JOIN/LOGIN Cell text='{txt}' link='{h}' click='{cl[:50]}...'")
-                        # Extract URL from href
-                        if (h.startswith("http") or h.startswith("/")) and "javascript" not in h:
-                            href = h
+                    # Target href or onclick
+                    target = h if (h and "javascript" not in h) else cl
+                    if target:
+                        m_url = re.search(r"(?:https?://|/)[^\s'\"]+", target)
+                        if m_url:
+                            href = m_url.group(0)
                             if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
+                            print(f"  [DEBUG-SUCCESS]: Extracted link for '{subj}': {href}")
                             break
-                        # Extract URL from onclick (click)
-                        if cl:
-                            m_click = re.search(r"(?:https?://|/)[^\s'\"]+", cl)
-                            if m_click:
-                                href = m_click.group(0)
-                                if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
-                                break
                 
                 if href == "#pending":
-                    print(f"  [DEBUG-WARN]: No link found for row '{subj}' among {len(cells)} cells")
+                    # Ultimate fallback: check ALL cells in row for any link
+                    for c in reversed(cells):
+                        h = str(c.get("href", "") or "")
+                        if h.startswith("http") and "javascript" not in h:
+                            href = h
+                            break
+                        if href != "#pending": break
+                
+                if href == "#pending":
+                    print(f"  [DEBUG-WARN]: Still no link found for '{subj}'. Cells: {[c.get('text') for c in cells]}")
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
@@ -2374,8 +2378,10 @@ puppeteer.use(StealthPlugin());
             # always put it in live-classes, even if the link is #pending.
             if is_class:
                 category = "live-classes"
+                print(f"  [SYNC-CLASS]: {title[:50]} -> link: {link}")
             else:
                 category = "notifications"
+                print(f"  [SYNC-NOTIF]: {title[:50]}")
                 
             semester = str(item.get("semester", "0"))
             # HEALER: If semester is "0", try to find it in the title
