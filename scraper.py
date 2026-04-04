@@ -2022,20 +2022,29 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
-                # Determine link: Prefer teams, then vcs.php, then any http URL in href, then regex from onclick
-                cell_h = next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http") and "javascript" not in str(c["href"])), "#pending")
-                cell_c = next((str(c["click"]) for c in reversed(cells) if c.get("click")), "")
+                # Determine link: Prefer cells containing 'Join' or 'Login' as they carry the button.
+                href = "#pending"
+                for c in reversed(cells):
+                    txt = str(c.get("text", "")).lower()
+                    h = str(c.get("href", "") or "")
+                    cl = str(c.get("click", "") or "")
+                    
+                    # If cell has "Join" or "Login" or is a direct Teams/vcs link
+                    if "join" in txt or "login" in txt or "teams.microsoft" in h or "vcs.php" in h or "teams.microsoft" in cl or "vcs.php" in cl:
+                        # Extract URL from href
+                        if h.startswith("http") and "javascript" not in h:
+                            href = h
+                            break
+                        # Extract URL from onclick (click)
+                        if cl:
+                            m_click = re.search(r"https?://[^\s'\"]+", cl)
+                            if m_click:
+                                href = m_click.group(0)
+                                break
                 
-                href = cell_h
-                if href == "#pending" and cell_c:
-                    # Regex for window.open('...') or similar
-                    m_click = re.search(r"https?://[^\s'\"]+", cell_c)
-                    if m_click: href = m_click.group(0)
-                
-                # Priority refinement: if we found a vcs.php or teams link anywhere, take it
-                if "teams.microsoft" in cell_c or "vcs.php" in cell_c:
-                    m_prio = re.search(r"https?://[^\s'\"]+", cell_c)
-                    if m_prio: href = m_prio.group(0)
+                # Ultimate fallback: first http link in the row if still pending
+                if href == "#pending":
+                    href = next((str(c["href"]) for c in reversed(cells) if c.get("href") and str(c["href"]).startswith("http") and "javascript" not in str(c["href"])), "#pending")
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
