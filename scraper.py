@@ -2477,49 +2477,46 @@ puppeteer.use(StealthPlugin());
         for category in target_categories:
             for semester in target_semesters:
                 items = groups[category].get(semester, []) # type: ignore
-                
-                # v75.3: PROTECTION GUARD for Termux & Render Sync
-                # If we are syncing "notifications" but we are NOT in Termux,
-                # we must preserve any existing "live-classes" that were already in the notifications feed.
-                if category == "notifications" and not is_termux_env:
-                    existing_notifs = notifier.get_from_website(semester)
-                    if existing_notifs:
-                        # Extract items that look like live classes or timetables from current feed
-                        existing_protected_items = [
-                            n for n in existing_notifs 
-                            if (n.get("description") and "MBA Live Class" in n["description"]) or 
-                               (n.get("link") and ("teams.microsoft" in n["link"] or "vcs.php" in n["link"])) or
-                               (n.get("title") and "[Timetable]" in n["title"])
-                        ]
-                        if existing_protected_items:
-                            print(f"  [GUARD]: Preserving {len(existing_protected_items)} classes/timetables in Sem {semester} notices feed.")
-                            # Merge them into our sync list (avoid duplicates)
-                            for ep in existing_protected_items:
+
+                if is_termux_env:
+                    # TERMUX: Full authority - sync everything as-is
+                    print(f"  [TERMUX-SYNC]: {category} Sem {semester} → {len(items)} items")
+                    sync_deletions = allow_deletions
+                    if not items and not sync_deletions:
+                        print(f"[SYNC]: 🛡️ Skipping {category} SEM {semester} (empty + no-delete).")
+                        continue
+                else:
+                    # NON-TERMUX (Render): Conservative - protect Termux data
+                    sync_deletions = allow_deletions
+                    
+                    if category == "live-classes":
+                        sync_deletions = False
+                    
+                    if category == "notifications" and semester in ["1", "2", "3", "4"]:
+                        sync_deletions = False
+                    
+                    # Merge protected items from existing backend feed
+                    if category == "notifications":
+                        existing_notifs = notifier.get_from_website(semester)
+                        if existing_notifs:
+                            protected = [
+                                n for n in existing_notifs
+                                if (n.get("description") and "MBA Live Class" in n["description"]) or
+                                   (n.get("link") and ("teams.microsoft" in n["link"] or "vcs.php" in n["link"]))
+                            ]
+                            for ep in protected:
                                 if not any(str(n.get("link")) == str(ep.get("link")) for n in items):
                                     items.append(ep)
-                
-                # CRITICAL: Prevent wiping out live-classes it didn't scrape!
-                current_allow_deletions = allow_deletions
-                if category == "live-classes" and not is_termux_env:
-                    current_allow_deletions = False
-                
-                # v75.4: PARANOID SYNC PROTECTION
-                # Render/Notices scraper should NEVER allow deletions for semesters handled by Termux (1, 2, 3, 4).
-                if category == "notifications" and not is_termux_env and semester in ["1", "2", "3", "4"]:
-                    current_allow_deletions = False
-                    print(f"  [GUARD]: Disabling deletions for SEM {semester} to protect Termux classes.")
-                
-                # Safety check: If we have no items and we aren't allowing deletions, it means 
-                # this category/semester is likely delegated to another environment (Phone).
-                # Skip the sync entirely to preserve current data.
-                if not items and not current_allow_deletions:
-                    print(f"[SYNC]: 🛡️ Skipping {category} SEM {semester} (No items & deletions disabled). Preserving phone data.")
-                    continue
                     
-                if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=current_allow_deletions):
+                    if not items and not sync_deletions:
+                        print(f"[SYNC]: 🛡️ Skipping {category} SEM {semester} (empty, non-Termux).")
+                        continue
+
+                if notifier.bulk_sync_to_website(category, semester, items, allow_deletions=sync_deletions):
                     stats["groups_synced"] += 1 # type: ignore
                 else:
                     stats["failed"] += 1 # type: ignore
+
 
         # v73.9: Manual Dismissal & Restore Detection
         # If an item was in our history (synced_ids.json) but is MISSING from the 
