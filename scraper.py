@@ -1981,8 +1981,9 @@ puppeteer.use(StealthPlugin());
             except (ValueError, IndexError, TypeError):
                 yr = self.current_year
             
-            # Allow current year and future years, but completely block past years
-            if yr >= self.current_year:
+            # v83.28: Allow current year, future years, and a 1-year past buffer (Current - 1)
+            # This ensures 2025 data is allowed during 2026, but 2024 is blocked.
+            if yr >= (self.current_year - 1):
                 filtered.append(item)
                 if link != "#pending":
                     seen_links.add(link)
