@@ -2622,7 +2622,7 @@ puppeteer.use(StealthPlugin());
                     is_in_folder = bool(item.get("folderId"))
                     to_delete = not is_in_folder and (
                         (sem == "0" and item_date < thirty_ago) or
-                        (sem != "0" and item_date.date() < now.date())
+                        (sem != "0" and item_date.date() < (now - datetime.timedelta(days=1)).date())
                     )
                     if to_delete and notifier.delete_from_website(sem, item_id):
                         deleted += 1 # type: ignore
@@ -2653,8 +2653,9 @@ if __name__ == "__main__":
             try:
                 notifier = Notifier(BACKEND_URL, SCRAPER_KEY)
                 scraper.sync_results(results, notifier, "synced_ids.json")
-                if mode == "all":
-                    scraper.cleanup_old_data(notifier)
+                # v83.27: Disabled redundant standalone cleanup to let backend handle Smart Purge
+                # if mode == "all":
+                #     scraper.cleanup_old_data(notifier)
                 print(f"[OMNI]: Scan ({mode}) complete.")
             except NameError:
                 print("[ERROR]: Notifier not found. Sync skipped.")
