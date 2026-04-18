@@ -2155,7 +2155,7 @@ puppeteer.use(StealthPlugin());
             if not final_words or final_words[-1].lower() != w.lower():
                 final_words.append(w)
         
-        # 3. CLEAN SUBJECT - UNIVERSAL WORD FILTER (v100.6)
+        # 3. CLEAN SUBJECT - UNIVERSAL WORD FILTER (v100.7)
         seen_norm = set()
         words = clean.split()
         final_words = []
@@ -2163,8 +2163,9 @@ puppeteer.use(StealthPlugin());
         
         for w in words:
             norm = re.sub(r'[^A-Z]', '', w.upper())
+            is_camel = bool(re.search(r'[a-z]', w))
             if len(norm) >= 2:
-                if norm in seen_norm:
+                if norm in seen_norm and not is_camel:
                     continue
                 seen_norm.add(norm)
             final_words.append(w)
