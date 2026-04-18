@@ -2155,7 +2155,24 @@ puppeteer.use(StealthPlugin());
             if not final_words or final_words[-1].lower() != w.lower():
                 final_words.append(w)
         
-        return " ".join(final_words).strip(": ").strip()
+        cleaned = " ".join(final_words).strip(": ").strip()
+        
+        # 4. PHRASE-LEVEL DEDUPLICATION (v100.3)
+        # Fixes: "Corporate Finance CORPORATE FINANCE" -> "Corporate Finance"
+        n = len(final_words)
+        if n >= 4 and n % 2 == 0:
+            half = n // 2
+            f_part = re.sub(r'[^A-Z]', '', "".join(final_words[:half]).upper())
+            s_part = re.sub(r'[^A-Z]', '', "".join(final_words[half:]).upper())
+            if f_part == s_part:
+                cleaned = " ".join(final_words[:half])
+        elif n >= 3:
+            last = re.sub(r'[^A-Z]', '', final_words[-1].upper())
+            prev = re.sub(r'[^A-Z]', '', "".join(final_words[:-1]).upper())
+            if last and last in prev and len(last) > 4:
+                cleaned = " ".join(final_words[:-1])
+
+        return cleaned.strip(": ").strip()
 
     def extract_semester_logic(self, text: str) -> str:
         if not text:
