@@ -2155,19 +2155,27 @@ puppeteer.use(StealthPlugin());
             if not final_words or final_words[-1].lower() != w.lower():
                 final_words.append(w)
         
-        # 3. CLEAN SUBJECT - UNIVERSAL WORD FILTER (v100.5)
+        # 3. CLEAN SUBJECT - UNIVERSAL WORD FILTER (v100.6)
         seen_norm = set()
         words = clean.split()
         final_words = []
+        stopwords = {'AND', 'IN', 'OF', 'FOR', 'WITH', 'THE', 'BY', 'TO'}
         
         for w in words:
             norm = re.sub(r'[^A-Z]', '', w.upper())
-            if len(norm) > 3:
+            if len(norm) >= 2:
                 if norm in seen_norm:
                     continue
                 seen_norm.add(norm)
             final_words.append(w)
             
+        while final_words:
+            last = re.sub(r'[^A-Z]', '', final_words[-1].upper())
+            if last in stopwords or len(last) < 2:
+                final_words.pop()
+            else:
+                break
+
         cleaned = " ".join(final_words).strip(": ").strip()
         return cleaned.replace(" :", ":").strip(": ").strip()
 
