@@ -1922,6 +1922,9 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw) # type: ignore
                 if semester == "0": semester = self.extract_semester_logic(subj) # type: ignore
                 
+                # v100.2: Clean subject title before saving
+                clean_subj = self.cleanup_title(subj)
+                
                 raw_href = next(
                     (a["href"] for c in reversed(cells)
                      for a in [c.find("a")] if a and a.get("href")),
@@ -1935,12 +1938,12 @@ puppeteer.use(StealthPlugin());
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
                 results.append({
-                    "title": f"[{clean_date}] MBA SEM {semester}: {subj} ({time_txt})",
+                    "title": f"[{clean_date}] MBA SEM {semester}: {clean_subj} ({time_txt})",
                     "link": abs_link, "semester": semester,
                     "date": parsed_date,
                     "class_time": time_txt,
                     "scheduledAt": iso_scheduled,
-                    "description": f"MBA Live Class: {subj} at {time_txt} (Teacher: {teacher})"
+                    "description": f"MBA Live Class: {clean_subj} at {time_txt} (Teacher: {teacher})"
                 })
 
         # General MBA links
@@ -2043,37 +2046,47 @@ puppeteer.use(StealthPlugin());
                 semester = self.extract_semester_logic(sem_raw)
                 if semester == "0": semester = self.extract_semester_logic(subj)
                 
-                # Determine link: NUCLEAR OPTION - Scan raw row HTML for any URL pattern
+                # v100.2: Clean subject title before saving
+                clean_subj = self.cleanup_title(subj)
+
+                # Determine link: NUCLEAR OPTION (Expanded v100.2)
                 href = "#pending"
                 
                 # Look for Teams or VCS links specifically in the whole row HTML
                 m_teams = re.search(r'https://teams\.microsoft\.com/[^\s\'"]+', row_html)
                 m_vcs = re.search(r'https?://[^\s\'"]+vcs\.php[^\s\'"]+', row_html)
-                m_rel = re.search(r'/(?:my|info)/[^\s\'"]+', row_html)
+                m_rel = re.search(r'/(?:my|info|auth)/[^\s\'"]+', row_html)
+                m_join = re.search(r'href=["\']([^"\']*(?:login|join|teams|meeting)[^"\']*)["\']', row_html, re.I)
                 
                 if m_teams: href = m_teams.group(0)
                 elif m_vcs: href = m_vcs.group(0)
+                elif m_join: 
+                    href = m_join.group(1)
+                    if not href.startswith("http"):
+                        href = urljoin("https://web.sol.du.ac.in", href)
                 elif m_rel: 
                     href = m_rel.group(0)
                     if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
                 
                 if href == "#pending":
-                    # Fallback to Cell-by-cell extraction
+                    # Fallback to Cell-by-cell extraction (Search specifically for 'Login' text)
                     for c in reversed(cells):
-                        h = str(c.get("href", "") or "")
-                        cl = str(c.get("click", "") or "")
-                        target = h if (h and "javascript" not in h) else cl
-                        if target:
-                            m_url = re.search(r"(?:https?://|/)[^\s'\"]+", target)
-                            if m_url:
-                                href = m_url.group(0)
-                                if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
-                                break
+                        cell_html = str(c.get("html", "")).lower()
+                        if "login" in cell_html or "join" in cell_html or "click" in cell_html:
+                            h = str(c.get("href", "") or "")
+                            cl = str(c.get("click", "") or "")
+                            target = h if (h and "javascript" not in h) else cl
+                            if target:
+                                m_url = re.search(r"(?:https?://|/)[^\s'\"]+", target)
+                                if m_url:
+                                    href = m_url.group(0)
+                                    if href.startswith("/"): href = "https://web.sol.du.ac.in" + href
+                                    break
                 
                 if href != "#pending":
-                    print(f"  [DEBUG-SUCCESS]: Found link for '{subj}': {href[:60]}...")
+                    print(f"  [DEBUG-SUCCESS]: Found link for '{clean_subj}': {href[:60]}...")
                 else:
-                    print(f"  [DEBUG-WARN]: Still no link found for '{subj}'.")
+                    print(f"  [DEBUG-WARN]: Still no link found for '{clean_subj}'.")
                 
                 # Standardize current_date and parse
                 clean_date = str(current_date).replace('/', '-')
@@ -2081,12 +2094,12 @@ puppeteer.use(StealthPlugin());
                 iso_scheduled = self.make_iso_scheduled(parsed_date, time_txt)
                 
                 results.append({
-                    "title": f"[{clean_date}] MBA SEM {semester}: {subj} ({time_txt})",
+                    "title": f"[{clean_date}] MBA SEM {semester}: {clean_subj} ({time_txt})",
                     "link": href, "semester": semester,
                     "date": parsed_date,
                     "class_time": time_txt,
                     "scheduledAt": iso_scheduled,
-                    "description": f"MBA Live Class: {subj} at {time_txt}"
+                    "description": f"MBA Live Class: {clean_subj} at {time_txt}"
                 })
         print(f"[OMNI]: 📊 Scanned {total_rows_found} rows, Found {len(results)} valid MBA classes.")
         return results
@@ -2112,6 +2125,37 @@ puppeteer.use(StealthPlugin());
             except Exception:
                 continue
         return self._parse_raw_tables(all_raw)
+
+    def cleanup_title(self, title: str) -> str:
+        """
+        v100.2: Removes redundant MBA branding and duplicate words.
+        Example: "MBA SEM 4: STRATEGY Strategic Management" -> "Strategic Management"
+        """
+        if not title: return ""
+        
+        # 1. Strip Leading Branding (case insensitive)
+        # Matches: "MBA SEM 4: ", "Semester 2 - ", etc.
+        clean = re.sub(r'^(?:MBA\s+)?(?:SEM(?:ESTER)?|YEAR|YR|PART|TERM)\s*(?:IV|III|II|I|[1-6])\s*[:\-]?\s*', '', title, flags=re.I)
+        
+        # 2. Strip Time Brackets (e.g. "(11:00 - 13:00)")
+        clean = re.sub(r'\(\d{1,2}:\d{2}\s*.*?\)', '', clean).strip()
+        
+        # 3. Aggressive word-by-word deduplication (case-insensitive)
+        words = clean.split()
+        final_words = []
+        for w in words:
+            # Check if this word is essentially a repeat of the previous one (e.g. STRATEGY Strategic)
+            w_norm = re.sub(r'[^A-Z]', '', w.upper())
+            prev_norm = re.sub(r'[^A-Z]', '', final_words[-1].upper()) if final_words else ""
+            
+            # If current word is a substring of previous or vice versa (and they are long enough)
+            if prev_norm and (w_norm in prev_norm or prev_norm in w_norm) and len(w_norm) > 3:
+                continue
+            
+            if not final_words or final_words[-1].lower() != w.lower():
+                final_words.append(w)
+        
+        return " ".join(final_words).strip(": ").strip()
 
     def extract_semester_logic(self, text: str) -> str:
         if not text:
