@@ -2128,51 +2128,45 @@ puppeteer.use(StealthPlugin());
 
     def cleanup_title(self, title: str) -> str:
         """
-        v100.2: Removes redundant MBA branding and duplicate words.
-        Example: "MBA SEM 4: STRATEGY Strategic Management" -> "Strategic Management"
+        v100.4: UNIVERSAL OMNI-CLEANUP
+        Uses fuzzy sequence detection to remove ALL repetitions regardless of subject name.
+        Example: "Corporate Finance CORPORATE FINANCE" -> "Corporate Finance"
+        Example: "Strategic Innovation... STRATEGIC INNOVATION..." -> "Strategic Innovation"
         """
         if not title: return ""
         
-        # 1. Strip Leading Branding (case insensitive)
-        # Matches: "MBA SEM 4: ", "Semester 2 - ", etc.
+        # 1. Strip Branding & Dates
         clean = re.sub(r'^(?:MBA\s+)?(?:SEM(?:ESTER)?|YEAR|YR|PART|TERM)\s*(?:IV|III|II|I|[1-6])\s*[:\-]?\s*', '', title, flags=re.I)
+        clean = re.sub(r'\[.*?\]', '', clean)
+        clean = re.sub(r'\(\d{1,2}:\d{2}.*?\)', '', clean).strip()
         
-        # 2. Strip Time Brackets (e.g. "(11:00 - 13:00)")
-        clean = re.sub(r'\(\d{1,2}:\d{2}\s*.*?\)', '', clean).strip()
-        
-        # 3. Aggressive word-by-word deduplication (case-insensitive)
+        # 2. Tokenize and Fuzzy Filter
         words = clean.split()
         final_words = []
         for w in words:
-            # Check if this word is essentially a repeat of the previous one (e.g. STRATEGY Strategic)
+            # Normalize word (Letters only)
             w_norm = re.sub(r'[^A-Z]', '', w.upper())
-            prev_norm = re.sub(r'[^A-Z]', '', final_words[-1].upper()) if final_words else ""
-            
-            # If current word is a substring of previous or vice versa (and they are long enough)
-            if prev_norm and (w_norm in prev_norm or prev_norm in w_norm) and len(w_norm) > 3:
+            if len(w_norm) < 3:
+                final_words.append(w)
                 continue
             
-            if not final_words or final_words[-1].lower() != w.lower():
+            # Look back window (8 words) - check for fuzzy matches
+            is_repeat = False
+            for prev in final_words[-8:]:
+                p_norm = re.sub(r'[^A-Z]', '', prev.upper())
+                # If current word is a substring of previous or vice versa
+                if w_norm in p_norm or p_norm in w_norm:
+                    is_repeat = True
+                    break
+            
+            if not is_repeat:
                 final_words.append(w)
         
-        cleaned = " ".join(final_words).strip(": ").strip()
-        
-        # 4. PHRASE-LEVEL DEDUPLICATION (v100.3)
-        # Fixes: "Corporate Finance CORPORATE FINANCE" -> "Corporate Finance"
-        n = len(final_words)
-        if n >= 4 and n % 2 == 0:
-            half = n // 2
-            f_part = re.sub(r'[^A-Z]', '', "".join(final_words[:half]).upper())
-            s_part = re.sub(r'[^A-Z]', '', "".join(final_words[half:]).upper())
-            if f_part == s_part:
-                cleaned = " ".join(final_words[:half])
-        elif n >= 3:
-            last = re.sub(r'[^A-Z]', '', final_words[-1].upper())
-            prev = re.sub(r'[^A-Z]', '', "".join(final_words[:-1]).upper())
-            if last and last in prev and len(last) > 4:
-                cleaned = " ".join(final_words[:-1])
-
-        return cleaned.strip(": ").strip()
+        # 3. Clean trailing punctuation
+        result = " ".join(final_words).strip(": ").strip()
+        # Handle "Subject : Specific" double colons
+        result = re.sub(r'\s*:\s*[:\-]\s*', ' : ', result)
+        return result
 
     def extract_semester_logic(self, text: str) -> str:
         if not text:
