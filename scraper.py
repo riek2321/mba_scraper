@@ -2155,24 +2155,20 @@ puppeteer.use(StealthPlugin());
             if not final_words or final_words[-1].lower() != w.lower():
                 final_words.append(w)
         
-        cleaned = " ".join(final_words).strip(": ").strip()
+        # 3. CLEAN SUBJECT - UNIVERSAL WORD FILTER (v100.5)
+        seen_norm = set()
+        words = clean.split()
+        final_words = []
         
-        # 4. SAFE SEQUENCE DEDUPLICATION (v100.4)
-        n = len(final_words)
-        if n >= 4:
-            mid = n // 2
-            f_part = "".join([re.sub(r'[^A-Z]', '', w.upper()) for w in final_words[:mid]])
-            s_part = "".join([re.sub(r'[^A-Z]', '', w.upper()) for w in final_words[mid:]])
-            if f_part == s_part and len(f_part) > 5:
-                cleaned = " ".join(final_words[:mid])
-            else:
-                last_word = re.sub(r'[^A-Z]', '', final_words[-1].upper())
-                if len(last_word) > 3:
-                    for i in range(n - 1):
-                        if re.sub(r'[^A-Z]', '', final_words[i].upper()) == last_word:
-                            cleaned = " ".join(final_words[:-1])
-                            break
-
+        for w in words:
+            norm = re.sub(r'[^A-Z]', '', w.upper())
+            if len(norm) > 3:
+                if norm in seen_norm:
+                    continue
+                seen_norm.add(norm)
+            final_words.append(w)
+            
+        cleaned = " ".join(final_words).strip(": ").strip()
         return cleaned.replace(" :", ":").strip(": ").strip()
 
     def extract_semester_logic(self, text: str) -> str:
