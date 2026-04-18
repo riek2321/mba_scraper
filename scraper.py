@@ -2154,6 +2154,7 @@ puppeteer.use(StealthPlugin());
             is_repeat = False
             for prev in final_words[-8:]:
                 p_norm = re.sub(r'[^A-Z]', '', prev.upper())
+                if not p_norm: continue # Skip symbols
                 # If current word is a substring of previous or vice versa
                 if w_norm in p_norm or p_norm in w_norm:
                     is_repeat = True
