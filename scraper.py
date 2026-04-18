@@ -2687,14 +2687,34 @@ puppeteer.use(StealthPlugin());
                         item.get("date", ""), "%Y-%m-%d"
                     )
                     # ✅ SAFETY: Never auto-delete items inside folders (Recorded Classes)
-                    is_in_folder = bool(item.get("folderId"))
-                    to_delete = not is_in_folder and (
-                        (sem == "0" and item_date < thirty_ago) or
-                        (sem != "0" and item_date.date() < (now - datetime.timedelta(days=1)).date())
-                    )
+                    # v89.2: Aggressive Timetable Expiration
+                    to_delete = False
+                    if not is_in_folder:
+                        # 1. Check title for specific expiry (e.g. "Dated 18.04")
+                        title = item.get("title", "").lower()
+                        dates = re.findall(r'(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})', title)
+                        if dates:
+                            # Use the LAST date found in title as expiry
+                            d, m, y = dates[-1]
+                            if len(y) == 2: y = "20" + y
+                            expiry_date = datetime.date(int(y), int(m), int(d))
+                            if now.date() > expiry_date:
+                                to_delete = True
+                                print(f"  [CLEANUP]: Expiring item by title date ({expiry_date}) -> {title[:40]}")
+                        
+                        # 2. Fallback to general date-based cleanup
+                        if not to_delete:
+                            if sem == "0":
+                                if item_date < thirty_ago: to_delete = True
+                            else:
+                                # Standard items expire after 1 day
+                                if item_date.date() < (now - datetime.timedelta(days=1)).date():
+                                    to_delete = True
+                    
                     if to_delete and notifier.delete_from_website(sem, item_id):
                         deleted += 1 # type: ignore
-                except Exception:
+                except Exception as e:
+                    print(f"  [CLEANUP-ERR]: {e}")
                     continue
             if deleted:
                 print(f"  [CLEANUP]: Sem {sem} — deleted {deleted} expired items")

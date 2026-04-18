@@ -104,7 +104,12 @@ class Notifier:
         url = f"{self.website_api_url}/api/sol/{category}/{semester}/{item_id}"
         headers = {"x-scraper-key": self.scraper_key}
         resp = self._request_with_retry("DELETE", url, headers=headers)
-        return resp is not None and resp.status_code in [200, 204]
+        if resp is not None and resp.status_code in [200, 204]:
+            return True
+        else:
+            print(f"  [API]: DELETE {url} FAILED (Status: {resp.status_code if resp else 'No Response'})")
+            if resp: print(f"  [API]: Response: {resp.text[:200]}")
+            return False
 
     def get_from_website(self, semester, category='notifications'):
         url = f"{self.website_api_url}/api/sol/{category}/{semester}"
