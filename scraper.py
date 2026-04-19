@@ -415,6 +415,11 @@ class MBAScraper:
         # v73.9: Manual Deletion Persistence
         self.dismissed_file = "dismissed_links.json"
         self.dismissed_links = self._load_json(self.dismissed_file, set)
+        
+        # v100.1: Hard Blacklist for unwanted topics (e.g., Library Notifications)
+        self.blacklist_keywords = ['library', 'ai in libraries', 'books', 'librarian']
+        self.blacklist_links = ['library_3.html', '/library_']
+        
         print(f"[OMNI]: Loaded {len(self.dismissed_links)} dismissed links (Blacklist).")
 
     def _load_json(self, path: str, type_fn: Any = list) -> Any:
@@ -1965,6 +1970,26 @@ puppeteer.use(StealthPlugin());
                         "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                         "class_time": "", "description": "Latest MBA Resource"
                     })
+
+        # v100.1: Final Filter - Remove anything blacklisted by keyword or URL
+        final_filtered = []
+        for item in results:
+            title = item.get("title", "").lower()
+            link = item.get("link", "").lower()
+            
+            # Check keywords
+            if any(bad in title for bad in self.blacklist_keywords):
+                print(f"  [BLACKLIST-KEY]: Skipping {item.get('title')[:40]}...")
+                continue
+            
+            # Check links
+            if any(bad in link for bad in self.blacklist_links):
+                print(f"  [BLACKLIST-LINK]: Skipping {item.get('link')}...")
+                continue
+                
+            final_filtered.append(item)
+            
+        results = final_filtered
 
         # Year filter
         filtered, seen_links = [], set()
