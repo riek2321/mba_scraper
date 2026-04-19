@@ -416,11 +416,15 @@ class MBAScraper:
         self.dismissed_file = "dismissed_links.json"
         self.dismissed_links = self._load_json(self.dismissed_file, set)
         
+        # v100.2: Persistent Discovery Dates (Solves shifting dates issue)
+        self.discovery_file = "discovery_dates.json"
+        self.discovery_dates = self._load_json(self.discovery_file, dict)
+        
         # v100.1: Hard Blacklist for unwanted topics (e.g., Library Notifications)
         self.blacklist_keywords = ['library', 'ai in libraries', 'books', 'librarian']
         self.blacklist_links = ['library_3.html', '/library_']
         
-        print(f"[OMNI]: Loaded {len(self.dismissed_links)} dismissed links (Blacklist).")
+        print(f"[OMNI]: Loaded {len(self.dismissed_links)} dismissed links and {len(self.discovery_dates)} discovery dates.")
 
     def _load_json(self, path: str, type_fn: Any = list) -> Any:
         try:
@@ -1874,11 +1878,20 @@ puppeteer.use(StealthPlugin());
                     txt = a.get_text().strip()
                     if txt:
                         abs_link = urljoin(self.current_url, a["href"])
+                        
+                        # Use extracted date if available
+                        e_date = self.extract_date_from_text(txt)
+                        
+                        if not e_date:
+                            # Use persistent discovery date or today's date
+                            e_date = self.discovery_dates.get(abs_link) or datetime.datetime.now().strftime("%Y-%m-%d")
+                            self.discovery_dates[abs_link] = e_date
+                        
                         results.append({
                             "title": ("MBA Update: " + re.sub(r'^\[.*?\]\s*', '', txt).strip())[:100], # type: ignore
                             "link": abs_link,
                             "semester": self.extract_semester_logic(txt),
-                            "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                            "date": e_date,
                             "class_time": "", "description": "SOL Announcement"
                         })
 
@@ -1961,13 +1974,21 @@ puppeteer.use(StealthPlugin());
                 #     continue
                 abs_link = urljoin(self.current_url, a["href"]) # pyre-ignore[16]
                 if abs_link not in seen:
-                    seen.add(abs_link)
                     clean = re.sub(r"^\[.*?\]\s*", "", txt).strip()
+                    
+                    # Use extracted date if available
+                    e_date = self.extract_date_from_text(txt)
+                    
+                    if not e_date:
+                        # Use persistent discovery date or today's date
+                        e_date = self.discovery_dates.get(abs_link) or datetime.datetime.now().strftime("%Y-%m-%d")
+                        self.discovery_dates[abs_link] = e_date
+                    
                     results.append({
                         "title": f"MBA Update: {clean}"[:100], # type: ignore
                         "link": abs_link,
                         "semester": self.extract_semester_logic(txt), # pyre-ignore[16]
-                        "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                        "date": e_date,
                         "class_time": "", "description": "Latest MBA Resource"
                     })
 
@@ -2205,6 +2226,21 @@ puppeteer.use(StealthPlugin());
         cleaned = " ".join(final_words).strip(": ").strip()
         return cleaned.replace(" :", ":").strip(": ").strip()
 
+    def extract_date_from_text(self, text: str) -> Optional[str]:
+        """Extract DD.MM.YYYY, DD-MM-YYYY, or DD/MM/YYYY from text"""
+        if not text: return None
+        # Pattern 1: DD.MM.YYYY or DD-MM-YYYY or DD/MM/YYYY
+        m = re.search(r"(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})", text)
+        if m:
+            d, m, y = m.groups()
+            if len(y) == 2: y = "20" + y # Assume 20xx
+            try:
+                dt = datetime.datetime(int(y), int(m), int(d))
+                return dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+        return None
+
     def extract_semester_logic(self, text: str) -> str:
         if not text:
             return "0"
@@ -2440,13 +2476,14 @@ puppeteer.use(StealthPlugin());
             self.notices.extend(await self.run_class_chain())
 
         # v73.9: Nuclear Reset for Blacklisted links (RECOVERY MODE)
-        # Clear if blacklist is suspiciously large (bug filled it with valid links)
         if len(self.dismissed_links) > 50:
             print(f"[OMNI]: ⚠️ Blacklist too large ({len(self.dismissed_links)}). Clearing to recover lost data.")
             self.dismissed_links = set()
             self._save_json(self.dismissed_file, list(self.dismissed_links))
 
-        # self.notices = [n for n in self.notices if str(n.get("link")) not in self.dismissed_links]
+        # v100.2: Save discovery dates for persistence
+        self._save_json(self.discovery_file, self.discovery_dates)
+        
         return self.notices
 
     # ═══════════════════════════════════════════
